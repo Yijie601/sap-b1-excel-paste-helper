@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-beta.2
+
+- Replaced the Inno Setup package with an NSIS installer whose license explicitly permits commercial use.
+- Preserved per-user installation, optional desktop/startup shortcuts, in-place updates, and user configuration across uninstall/reinstall.
+
 ## 0.1.0-beta.1
 
 - Added automatic clipboard monitoring and B:N invoice pre-validation.

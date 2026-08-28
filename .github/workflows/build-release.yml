@@ -53,19 +53,22 @@ jobs:
             -DestinationPath ".\artifacts\SapB1ExcelHelper-$env:APP_VERSION-win-x64.zip" `
             -Force
 
-      - name: Install Inno Setup
-        shell: pwsh
-        run: |
-          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path -LiteralPath $compiler)) {
-            choco install innosetup --yes --no-progress
-          }
+      - name: Install NSIS
+        run: choco install nsis --yes --no-progress
 
-      - name: Build installer
+      - name: Build NSIS installer
         shell: pwsh
         run: |
-          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          & $compiler "/DAppVersion=$env:APP_VERSION" .\installer\SapB1ExcelHelper.iss
+          New-Item -ItemType Directory -Path .\artifacts\installer -Force | Out-Null
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+            "$env:ProgramFiles\NSIS\makensis.exe"
+          )
+          $compiler = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $compiler) {
+            throw 'NSIS compiler was not found after installation.'
+          }
+          & $compiler "/DAPP_VERSION=$env:APP_VERSION" .\installer\SapB1ExcelHelper.nsi
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v6

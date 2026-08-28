@@ -68,12 +68,12 @@ Requirements:
 
 - Windows x64
 - .NET 8 SDK
-- Inno Setup 6 for the installer
+- NSIS 3.12 for the installer
 
 ```powershell
 dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
 dotnet publish .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" .\installer\SapB1ExcelHelper.iss
+& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.2 .\installer\SapB1ExcelHelper.nsi
 ```
 
 ## Publishing a new version
@@ -92,4 +92,3 @@ GitHub Actions builds the self-contained executable, Windows installer, portable
 - Windows x64 and SAP Business One only.
 - The first public build should be treated as a beta until calibrated and verified against the target company's SAP installation.
 - SAP UI layouts that move individual fields require recalibration.
-

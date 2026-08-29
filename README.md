@@ -8,7 +8,9 @@ A lightweight Windows tray utility that validates copied Excel AP Invoice rows a
 2. Press `Ctrl+C`. The helper validates and prepares the invoice immediately.
 3. Confirm the helper status is **Ready**.
 4. Switch to SAP Business One and make sure **AP Invoice** is active.
-5. Press `F8` (or map a Logitech side button to `F8`).
+5. Press the configured global hotkey (`F8` by default), or map a Logitech side button to that shortcut.
+
+Click the **Hotkey** link in the main status panel, or choose **Hotkey Settings** from the tray menu, to change the shortcut. Function keys F1–F24 can be used alone; other keys require Ctrl or Alt. The setting is saved under `%LOCALAPPDATA%\SapB1ExcelHelper\Config` and remains after updates.
 6. Review the completed invoice and click **Add** yourself.
 
 The helper never clicks SAP **Add** or **Update**.
@@ -75,7 +77,7 @@ Requirements:
 ```powershell
 dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
 dotnet publish .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish
-& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.3 .\installer\SapB1ExcelHelper.nsi
+& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.4 .\installer\SapB1ExcelHelper.nsi
 ```
 
 ## Publishing a new version

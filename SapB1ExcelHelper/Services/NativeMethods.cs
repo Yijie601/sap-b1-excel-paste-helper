@@ -10,6 +10,9 @@ internal static class NativeMethods
     internal const int WmClipboardUpdate = 0x031D;
     internal const int WmLButtonDown = 0x0201;
     internal const int WhMouseLl = 14;
+    internal const uint ModAlt = 0x0001;
+    internal const uint ModControl = 0x0002;
+    internal const uint ModShift = 0x0004;
     internal const uint ModNoRepeat = 0x4000;
     internal const uint GaRoot = 2;
     internal const uint SmtoAbortIfHung = 0x0002;
@@ -232,4 +235,3 @@ internal static class NativeMethods
         internal ushort ParameterHigh;
     }
 }
-

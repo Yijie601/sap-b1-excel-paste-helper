@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.4
+
+- Added a persistent custom global hotkey picker, available from the main status panel and tray menu.
+- Function keys can be used alone; other shortcuts require Ctrl or Alt to avoid blocking normal typing.
+- New shortcuts are checked with Windows before saving. If unavailable, the previous shortcut is restored.
+- Confirmed the calibration workflow hides its main window while capturing a click in SAP, stores a window-relative coordinate, and restores the calibration window afterward.
+
 ## 0.1.0-beta.3
 
 - Added automatic GitHub Release checks at startup, limited to once every 12 hours.

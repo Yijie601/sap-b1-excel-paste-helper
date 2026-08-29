@@ -10,6 +10,7 @@ public static class AppPaths
     public static string LogsDirectory { get; } = Path.Combine(DataDirectory, "Logs");
     public static string SupplierMappingFile { get; } = Path.Combine(ConfigDirectory, "supplier_mapping.csv");
     public static string CalibrationFile { get; } = Path.Combine(ConfigDirectory, "calibration.json");
+    public static string HotkeySettingsFile { get; } = Path.Combine(ConfigDirectory, "hotkey.json");
     public static string UpdateStateFile { get; } = Path.Combine(ConfigDirectory, "update_state.json");
 
     public static void EnsureCreated()

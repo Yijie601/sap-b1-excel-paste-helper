@@ -7,24 +7,28 @@ namespace SapB1ExcelHelper;
 public sealed class MainForm : Form
 {
     private const int HotkeyId = 0xB101;
-    private const uint VirtualKeyF8 = 0x77;
 
     private readonly ExcelClipboardParser _parser = new();
     private readonly SupplierMappingService _mappingService = new();
     private readonly CalibrationService _calibrationService = new();
+    private readonly HotkeySettingsService _hotkeySettingsService = new();
     private readonly SapWindowService _windowService = new();
     private readonly UpdateService _updateService = new();
     private readonly UpdateStateService _updateStateService = new();
     private readonly SapAutomationService _automationService;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _sapStatusTimer;
+    private readonly Label _subtitleLabel;
     private readonly Label _statusLabel;
     private readonly Label _invoiceLabel;
     private readonly Label _sapLabel;
     private readonly Label _mappingCountLabel;
+    private readonly LinkLabel _hotkeyLabel;
     private readonly Button _runButton;
     private readonly Button _updateButton;
+    private readonly ToolStripMenuItem _trayRunItem;
 
+    private HotkeyDefinition _hotkey;
     private InvoiceClipboardData? _preparedInvoice;
     private string _lastValidationError = "Copy Excel columns B:N first.";
     private DateTime _ignoreClipboardUntilUtc;
@@ -37,6 +41,7 @@ public sealed class MainForm : Form
     public MainForm()
     {
         _automationService = new SapAutomationService(_windowService);
+        _hotkey = _hotkeySettingsService.Load();
 
         Text = "SAP B1 Excel Helper";
         StartPosition = FormStartPosition.CenterScreen;
@@ -54,12 +59,13 @@ public sealed class MainForm : Form
             Location = new Point(28, 22)
         };
 
-        var subtitle = new Label
+        _subtitleLabel = new Label
         {
-            Text = "Copy Excel B:N. When Ready appears, switch to SAP AP Invoice and press F8.",
             ForeColor = Color.FromArgb(85, 91, 101),
-            AutoSize = true,
-            Location = new Point(31, 68)
+            AutoEllipsis = true,
+            Location = new Point(31, 68),
+            Size = new Size(560, 24),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
 
         var statusPanel = new Panel
@@ -99,19 +105,21 @@ public sealed class MainForm : Form
             AutoSize = true,
             Location = new Point(240, 92)
         };
-        var hotkeyLabel = new Label
+        _hotkeyLabel = new LinkLabel
         {
-            Text = "Hotkey: F8",
-            AutoSize = true,
-            Location = new Point(445, 92),
+            AutoEllipsis = true,
+            Location = new Point(385, 88),
+            Size = new Size(155, 28),
+            TextAlign = ContentAlignment.MiddleRight,
             Anchor = AnchorStyles.Top | AnchorStyles.Right
         };
+        _hotkeyLabel.LinkClicked += (_, _) => OpenHotkeySettings();
         statusPanel.Controls.AddRange(new Control[]
         {
-            _statusLabel, _invoiceLabel, _sapLabel, _mappingCountLabel, hotkeyLabel
+            _statusLabel, _invoiceLabel, _sapLabel, _mappingCountLabel, _hotkeyLabel
         });
 
-        _runButton = CreateButton("Run Now (F8)", 30, 278, 170);
+        _runButton = CreateButton(string.Empty, 30, 278, 170);
         _runButton.BackColor = Color.FromArgb(31, 106, 68);
         _runButton.ForeColor = Color.White;
         _runButton.FlatAppearance.BorderSize = 0;
@@ -134,15 +142,17 @@ public sealed class MainForm : Form
 
         Controls.AddRange(new Control[]
         {
-            header, subtitle, statusPanel, _runButton,
+            header, _subtitleLabel, statusPanel, _runButton,
             mappingButton, calibrationButton, logsButton, _updateButton, minimizeButton
         });
 
         var trayMenu = new ContextMenuStrip();
         trayMenu.Items.Add("Open", null, (_, _) => RestoreFromTray());
-        trayMenu.Items.Add("Run Now (F8)", null, async (_, _) => await RunAutomationAsync());
+        _trayRunItem = new ToolStripMenuItem(string.Empty, null, async (_, _) => await RunAutomationAsync());
+        trayMenu.Items.Add(_trayRunItem);
         trayMenu.Items.Add("Supplier Mapping", null, (_, _) => OpenSupplierMappings());
         trayMenu.Items.Add("Calibration", null, (_, _) => OpenCalibration());
+        trayMenu.Items.Add("Hotkey Settings...", null, (_, _) => OpenHotkeySettings());
         trayMenu.Items.Add("Check for Updates", null, async (_, _) => await CheckForUpdatesAsync(userInitiated: true));
         trayMenu.Items.Add("Open Log", null, (_, _) => OpenFolder(AppPaths.LogsDirectory));
         trayMenu.Items.Add("Open Data Folder", null, (_, _) => OpenFolder(AppPaths.DataDirectory));
@@ -157,6 +167,7 @@ public sealed class MainForm : Form
             Visible = true
         };
         _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
+        RefreshHotkeyText();
 
         _sapStatusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _sapStatusTimer.Tick += (_, _) => UpdateSapStatus();
@@ -181,20 +192,12 @@ public sealed class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        _hotkeyRegistered = NativeMethods.RegisterHotKey(
-            Handle,
-            HotkeyId,
-            NativeMethods.ModNoRepeat,
-            VirtualKeyF8);
+        _hotkeyRegistered = RegisterHotkey(_hotkey);
         _ = NativeMethods.AddClipboardFormatListener(Handle);
 
         if (!_hotkeyRegistered)
         {
-            BeginInvoke(() => MessageBox.Show(
-                "F8 is already being used by another program. Close that program and restart this helper.",
-                "Hotkey unavailable",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning));
+            BeginInvoke(() => ShowHotkeyUnavailable(_hotkey));
         }
     }
 
@@ -541,6 +544,94 @@ public sealed class MainForm : Form
         using var form = new CalibrationForm(_calibrationService, _windowService);
         form.ShowDialog(this);
     }
+
+    private void OpenHotkeySettings()
+    {
+        if (_automationRunning)
+        {
+            MessageBox.Show(
+                "Wait for the current SAP paste to finish before changing the hotkey.",
+                "Hotkey settings",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        var originalHotkey = _hotkey;
+        UnregisterHotkey();
+
+        using var form = new HotkeySettingsForm(originalHotkey);
+        if (form.ShowDialog(this) != DialogResult.OK)
+        {
+            _hotkeyRegistered = RegisterHotkey(originalHotkey);
+            if (!_hotkeyRegistered)
+            {
+                ShowHotkeyUnavailable(originalHotkey);
+            }
+
+            return;
+        }
+
+        var selectedHotkey = form.SelectedHotkey;
+        if (!RegisterHotkey(selectedHotkey))
+        {
+            _hotkeyRegistered = RegisterHotkey(originalHotkey);
+            ShowHotkeyUnavailable(selectedHotkey);
+            return;
+        }
+
+        _hotkeyRegistered = true;
+        try
+        {
+            _hotkeySettingsService.Save(selectedHotkey);
+            _hotkey = selectedHotkey;
+            RefreshHotkeyText();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error("HOTKEY_SAVE_ERROR", exception.Message, exception);
+            UnregisterHotkey();
+            _hotkeyRegistered = RegisterHotkey(originalHotkey);
+            MessageBox.Show(
+                $"The hotkey could not be saved. The previous shortcut remains active.\r\n\r\n{exception.Message}",
+                "Hotkey settings",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private bool RegisterHotkey(HotkeyDefinition hotkey) =>
+        NativeMethods.RegisterHotKey(
+            Handle,
+            HotkeyId,
+            (uint)hotkey.Modifiers | NativeMethods.ModNoRepeat,
+            hotkey.VirtualKey);
+
+    private void UnregisterHotkey()
+    {
+        if (!_hotkeyRegistered)
+        {
+            return;
+        }
+
+        _ = NativeMethods.UnregisterHotKey(Handle, HotkeyId);
+        _hotkeyRegistered = false;
+    }
+
+    private void RefreshHotkeyText()
+    {
+        var hotkeyText = _hotkey.DisplayText;
+        _subtitleLabel.Text = $"Copy Excel B:N. When Ready appears, switch to SAP AP Invoice and press {hotkeyText}.";
+        _hotkeyLabel.Text = $"Hotkey: {hotkeyText}";
+        _runButton.Text = $"Run Now ({hotkeyText})";
+        _trayRunItem.Text = $"Run Now ({hotkeyText})";
+    }
+
+    private static void ShowHotkeyUnavailable(HotkeyDefinition hotkey) => MessageBox.Show(
+        $"{hotkey.DisplayText} is already being used by Windows or another program. Choose a different shortcut in Hotkey Settings.",
+        "Hotkey unavailable",
+        MessageBoxButtons.OK,
+        MessageBoxIcon.Warning);
 
     private static void OpenFolder(string folder)
     {

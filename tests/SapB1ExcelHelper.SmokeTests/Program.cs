@@ -10,7 +10,8 @@ var tests = new (string Name, Action Run)[]
     ("Loads, saves, and resolves supplier CSV values", HandlesSupplierMappings),
     ("Compares stable and prerelease semantic versions", ComparesSemanticVersions),
     ("Selects the newest compatible GitHub release asset", SelectsNewestUpdate),
-    ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest)
+    ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest),
+    ("Validates and persists custom global hotkeys", HandlesCustomHotkeys)
 };
 
 var failures = 0;
@@ -181,6 +182,35 @@ static void VerifiesUpdateDigest()
     finally
     {
         File.Delete(file);
+    }
+}
+
+static void HandlesCustomHotkeys()
+{
+    var functionKey = new HotkeyDefinition(0x78, HotkeyModifiers.None);
+    True(functionKey.IsSupported(out _), "F9 should be allowed without a modifier.");
+    Equal("F9", functionKey.DisplayText);
+
+    var combination = new HotkeyDefinition(
+        0x4B,
+        HotkeyModifiers.Control | HotkeyModifiers.Shift);
+    True(combination.IsSupported(out _), "Ctrl + Shift + K should be supported.");
+    Equal("Ctrl + Shift + K", combination.DisplayText);
+
+    var bareLetter = new HotkeyDefinition(0x4B, HotkeyModifiers.None);
+    True(!bareLetter.IsSupported(out _), "Bare letter keys should not be registered globally.");
+
+    var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"sap-helper-hotkey-{Guid.NewGuid():N}");
+    var file = Path.Combine(temporaryDirectory, "hotkey.json");
+    try
+    {
+        var service = new HotkeySettingsService(file);
+        service.Save(combination);
+        Equal(combination, service.Load());
+    }
+    finally
+    {
+        Directory.Delete(temporaryDirectory, true);
     }
 }
 

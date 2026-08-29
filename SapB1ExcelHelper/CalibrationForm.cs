@@ -175,7 +175,7 @@ public sealed class CalibrationForm : Form
                 return;
             }
 
-            if (!_windowService.TryGetActiveApInvoice(out var window, out var error))
+            if (!_windowService.TryGetApInvoiceAtPoint(click.Value, out var window, out var error))
             {
                 _statusLabel.Text = error;
                 MessageBox.Show(error, "Calibration", MessageBoxButtons.OK, MessageBoxIcon.Warning);

@@ -53,6 +53,49 @@ public sealed class SapWindowService
         return true;
     }
 
+    public bool TryGetApInvoiceAtPoint(Point screenPoint, out SapWindowInfo? info, out string error)
+    {
+        info = null;
+        var clickedWindow = NativeMethods.WindowFromPoint(screenPoint);
+        if (clickedWindow == nint.Zero)
+        {
+            error = "Windows could not identify the clicked position. Try capturing the field again.";
+            return false;
+        }
+
+        var root = NativeMethods.GetAncestor(clickedWindow, NativeMethods.GaRoot);
+        var threadId = NativeMethods.GetWindowThreadProcessId(root, out var processId);
+        if (!IsSapProcess(processId, root))
+        {
+            error = "The click was not inside SAP Business One. Click Capture, then click the real Supplier field in SAP.";
+            return false;
+        }
+
+        var apInvoice = FindContainingApInvoice(clickedWindow);
+        if (apInvoice == nint.Zero)
+        {
+            apInvoice = FindNamedApInvoice(root);
+        }
+
+        if (apInvoice == nint.Zero || !NativeMethods.GetWindowRect(apInvoice, out var rectangle))
+        {
+            error = "The click was inside SAP, but not inside an open A/P Invoice window.";
+            return false;
+        }
+
+        info = new SapWindowInfo(
+            root,
+            apInvoice,
+            rectangle.Left,
+            rectangle.Top,
+            rectangle.Width,
+            rectangle.Height,
+            processId,
+            threadId);
+        error = string.Empty;
+        return true;
+    }
+
     public bool TryFindOpenApInvoice(out SapWindowInfo? info)
     {
         info = null;
@@ -210,9 +253,26 @@ public sealed class SapWindowService
             if (NativeMethods.GetClassName(current).Equals(MdiChildClass, StringComparison.Ordinal))
             {
                 var title = NativeMethods.GetWindowText(current);
-                return title.Contains("AP Invoice", StringComparison.OrdinalIgnoreCase)
+                return IsApInvoiceTitle(title)
                     ? current
                     : nint.Zero;
+            }
+
+            current = NativeMethods.GetParent(current);
+        }
+
+        return nint.Zero;
+    }
+
+    private static nint FindContainingApInvoice(nint window)
+    {
+        var current = window;
+        while (current != nint.Zero)
+        {
+            if (NativeMethods.GetClassName(current).Equals(MdiChildClass, StringComparison.Ordinal) &&
+                IsApInvoiceTitle(NativeMethods.GetWindowText(current)))
+            {
+                return current;
             }
 
             current = NativeMethods.GetParent(current);
@@ -232,7 +292,7 @@ public sealed class SapWindowService
             }
 
             var title = NativeMethods.GetWindowText(window);
-            if (!title.Contains("AP Invoice", StringComparison.OrdinalIgnoreCase))
+            if (!IsApInvoiceTitle(title))
             {
                 return true;
             }
@@ -241,5 +301,19 @@ public sealed class SapWindowService
             return false;
         }, nint.Zero);
         return found;
+    }
+
+    public static bool IsApInvoiceTitle(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        var normalized = title
+            .Replace("/", string.Empty, StringComparison.Ordinal)
+            .Replace("\\", string.Empty, StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal);
+        return normalized.Contains("APInvoice", StringComparison.OrdinalIgnoreCase);
     }
 }

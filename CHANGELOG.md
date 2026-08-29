@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.6
+
+- Fixed calibration capture incorrectly reporting that SAP was inactive before Windows completed its focus change.
+- Calibration now identifies SAP and the A/P Invoice from the window underneath the actual click position.
+- Added support for both `AP Invoice` and SAP's standard `A/P Invoice` window titles.
+- Added clearer errors when a captured click is outside SAP or outside the A/P Invoice window.
+
 ## 0.1.0-beta.5
 
 - Removed Supplier Mapping from the workflow and interface.

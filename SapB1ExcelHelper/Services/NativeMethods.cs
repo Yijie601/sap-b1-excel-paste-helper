@@ -44,6 +44,9 @@ internal static class NativeMethods
     internal static extern nint GetForegroundWindow();
 
     [DllImport("user32.dll")]
+    internal static extern nint WindowFromPoint(Point point);
+
+    [DllImport("user32.dll")]
     internal static extern nint GetAncestor(nint window, uint flags);
 
     [DllImport("user32.dll")]

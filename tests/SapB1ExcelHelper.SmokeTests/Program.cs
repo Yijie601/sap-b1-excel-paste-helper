@@ -11,7 +11,8 @@ var tests = new (string Name, Action Run)[]
     ("Compares stable and prerelease semantic versions", ComparesSemanticVersions),
     ("Selects the newest compatible GitHub release asset", SelectsNewestUpdate),
     ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest),
-    ("Validates and persists custom global hotkeys", HandlesCustomHotkeys)
+    ("Validates and persists custom global hotkeys", HandlesCustomHotkeys),
+    ("Recognizes SAP AP and A/P Invoice titles", RecognizesApInvoiceTitles)
 };
 
 var failures = 0;
@@ -209,6 +210,13 @@ static void HandlesCustomHotkeys()
     {
         Directory.Delete(temporaryDirectory, true);
     }
+}
+
+static void RecognizesApInvoiceTitles()
+{
+    True(SapWindowService.IsApInvoiceTitle("A/P Invoice"), "Standard SAP A/P title was not recognized.");
+    True(SapWindowService.IsApInvoiceTitle("AP Invoice - Vendor"), "AP title without slash was not recognized.");
+    True(!SapWindowService.IsApInvoiceTitle("Sales Order"), "An unrelated SAP window was accepted.");
 }
 
 static string Row(params string[] cells)

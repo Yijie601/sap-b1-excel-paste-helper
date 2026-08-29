@@ -7,7 +7,10 @@ var tests = new (string Name, Action Run)[]
     ("Rejects multiple invoices", RejectsMultipleInvoices),
     ("Rejects Excel headers", RejectsHeader),
     ("Rejects an incorrect column count", RejectsWrongColumnCount),
-    ("Loads, saves, and resolves supplier CSV values", HandlesSupplierMappings)
+    ("Loads, saves, and resolves supplier CSV values", HandlesSupplierMappings),
+    ("Compares stable and prerelease semantic versions", ComparesSemanticVersions),
+    ("Selects the newest compatible GitHub release asset", SelectsNewestUpdate),
+    ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest)
 };
 
 var failures = 0;
@@ -101,6 +104,86 @@ static void HandlesSupplierMappings()
     }
 }
 
+static void ComparesSemanticVersions()
+{
+    var beta2 = SemanticVersion.Parse("v0.1.0-beta.2");
+    var beta3 = SemanticVersion.Parse("0.1.0-beta.3+build.99");
+    var stable = SemanticVersion.Parse("0.1.0");
+    var nextMinorBeta = SemanticVersion.Parse("0.2.0-beta.1");
+
+    True(beta3 > beta2, "beta.3 should be newer than beta.2.");
+    True(stable > beta3, "A stable release should be newer than its prereleases.");
+    True(nextMinorBeta > stable, "A newer minor prerelease should have a newer core version.");
+    Equal("0.1.0-beta.3", beta3.ToString());
+}
+
+static void SelectsNewestUpdate()
+{
+    const string digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    var json = $$"""
+        [
+          {
+            "tag_name": "v0.1.0-beta.3",
+            "name": "Beta 3",
+            "body": "Update prompt",
+            "html_url": "https://github.com/Yijie601/sap-b1-excel-paste-helper/releases/tag/v0.1.0-beta.3",
+            "draft": false,
+            "prerelease": true,
+            "assets": [
+              {
+                "name": "SapB1ExcelHelper-Setup-0.1.0-beta.3-win-x64.exe",
+                "state": "uploaded",
+                "browser_download_url": "https://github.com/Yijie601/sap-b1-excel-paste-helper/releases/download/v0.1.0-beta.3/SapB1ExcelHelper-Setup-0.1.0-beta.3-win-x64.exe",
+                "size": 123456,
+                "digest": "sha256:{{digest}}"
+              }
+            ]
+          },
+          {
+            "tag_name": "v0.1.0-beta.1",
+            "name": "Old beta",
+            "body": "",
+            "html_url": "https://github.com/Yijie601/sap-b1-excel-paste-helper/releases/tag/v0.1.0-beta.1",
+            "draft": false,
+            "prerelease": true,
+            "assets": []
+          }
+        ]
+        """;
+
+    var update = UpdateService.SelectAvailableUpdate(
+        json,
+        SemanticVersion.Parse("0.1.0-beta.2"));
+    True(update is not null, "Expected beta.3 update for a beta.2 installation.");
+    Equal("0.1.0-beta.3", update!.Version.ToString());
+    Equal(digest, update.Sha256Digest);
+
+    var stableUserUpdate = UpdateService.SelectAvailableUpdate(
+        json.Replace("v0.1.0-beta.3", "v0.2.0-beta.1", StringComparison.Ordinal)
+            .Replace("0.1.0-beta.3", "0.2.0-beta.1", StringComparison.Ordinal),
+        SemanticVersion.Parse("0.1.0"));
+    True(stableUserUpdate is null, "Stable users must not receive prerelease updates.");
+}
+
+static void VerifiesUpdateDigest()
+{
+    var file = Path.Combine(Path.GetTempPath(), $"sap-helper-digest-{Guid.NewGuid():N}.tmp");
+    try
+    {
+        File.WriteAllText(file, "abc");
+        var valid = UpdateService.VerifySha256Async(
+                file,
+                "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD")
+            .GetAwaiter()
+            .GetResult();
+        True(valid, "Known SHA-256 digest did not match.");
+    }
+    finally
+    {
+        File.Delete(file);
+    }
+}
+
 static string Row(params string[] cells)
 {
     Equal(13, cells.Length);
@@ -136,4 +219,3 @@ static void Throws<TException>(Action action, string expectedMessage) where TExc
 
     throw new InvalidOperationException($"Expected {typeof(TException).Name} containing '{expectedMessage}'.");
 }
-

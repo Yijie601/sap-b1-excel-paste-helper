@@ -62,6 +62,8 @@ Download the latest `SapB1ExcelHelper-Setup-...-win-x64.exe` from the GitHub Rel
 
 Installing a newer version over the existing version updates the application while preserving mappings and calibration under `%LOCALAPPDATA%`.
 
+The helper checks this repository for a newer GitHub Release at startup, at most once every 12 hours. When an update is available it shows a visible prompt with **Download & Install** and **Later** options. It never installs silently. Choosing Download & Install downloads the Windows installer, verifies its GitHub-provided SHA-256 digest, and opens the normal setup wizard for the user to complete. A manual **Check for Updates** action is available in the main window and tray menu.
+
 ## Building locally
 
 Requirements:
@@ -73,7 +75,7 @@ Requirements:
 ```powershell
 dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
 dotnet publish .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish
-& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.2 .\installer\SapB1ExcelHelper.nsi
+& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.3 .\installer\SapB1ExcelHelper.nsi
 ```
 
 ## Publishing a new version

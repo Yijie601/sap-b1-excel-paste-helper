@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-beta.3
+
+- Added automatic GitHub Release checks at startup, limited to once every 12 hours.
+- Added a visible update prompt with release notes, Download & Install, Later, and download progress.
+- Added a manual Check for Updates action in the main window and tray menu.
+- Added prerelease-aware semantic version comparison, HTTPS host validation, and mandatory SHA-256 verification before launching the visible installer.
+- Updates are never installed silently or forced while SAP automation is running.
+
 ## 0.1.0-beta.2
 
 - Replaced the Inno Setup package with an NSIS installer whose license explicitly permits commercial use.

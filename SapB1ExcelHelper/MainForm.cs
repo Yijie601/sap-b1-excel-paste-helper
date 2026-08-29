@@ -13,6 +13,8 @@ public sealed class MainForm : Form
     private readonly SupplierMappingService _mappingService = new();
     private readonly CalibrationService _calibrationService = new();
     private readonly SapWindowService _windowService = new();
+    private readonly UpdateService _updateService = new();
+    private readonly UpdateStateService _updateStateService = new();
     private readonly SapAutomationService _automationService;
     private readonly NotifyIcon _trayIcon;
     private readonly System.Windows.Forms.Timer _sapStatusTimer;
@@ -21,6 +23,7 @@ public sealed class MainForm : Form
     private readonly Label _sapLabel;
     private readonly Label _mappingCountLabel;
     private readonly Button _runButton;
+    private readonly Button _updateButton;
 
     private InvoiceClipboardData? _preparedInvoice;
     private string _lastValidationError = "Copy Excel columns B:N first.";
@@ -28,6 +31,8 @@ public sealed class MainForm : Form
     private bool _automationRunning;
     private bool _allowExit;
     private bool _hotkeyRegistered;
+    private bool _updateCheckRunning;
+    private bool _updatePromptOpen;
 
     public MainForm()
     {
@@ -121,8 +126,8 @@ public sealed class MainForm : Form
         var logsButton = CreateButton("Open Logs", 30, 332, 170);
         logsButton.Click += (_, _) => OpenFolder(AppPaths.LogsDirectory);
 
-        var dataButton = CreateButton("Open Data Folder", 210, 332, 180);
-        dataButton.Click += (_, _) => OpenFolder(AppPaths.DataDirectory);
+        _updateButton = CreateButton("Check for Updates", 210, 332, 180);
+        _updateButton.Click += async (_, _) => await CheckForUpdatesAsync(userInitiated: true);
 
         var minimizeButton = CreateButton("Minimize to Tray", 400, 332, 192);
         minimizeButton.Click += (_, _) => MinimizeToTray();
@@ -130,7 +135,7 @@ public sealed class MainForm : Form
         Controls.AddRange(new Control[]
         {
             header, subtitle, statusPanel, _runButton,
-            mappingButton, calibrationButton, logsButton, dataButton, minimizeButton
+            mappingButton, calibrationButton, logsButton, _updateButton, minimizeButton
         });
 
         var trayMenu = new ContextMenuStrip();
@@ -138,7 +143,9 @@ public sealed class MainForm : Form
         trayMenu.Items.Add("Run Now (F8)", null, async (_, _) => await RunAutomationAsync());
         trayMenu.Items.Add("Supplier Mapping", null, (_, _) => OpenSupplierMappings());
         trayMenu.Items.Add("Calibration", null, (_, _) => OpenCalibration());
+        trayMenu.Items.Add("Check for Updates", null, async (_, _) => await CheckForUpdatesAsync(userInitiated: true));
         trayMenu.Items.Add("Open Log", null, (_, _) => OpenFolder(AppPaths.LogsDirectory));
+        trayMenu.Items.Add("Open Data Folder", null, (_, _) => OpenFolder(AppPaths.DataDirectory));
         trayMenu.Items.Add(new ToolStripSeparator());
         trayMenu.Items.Add("Exit", null, (_, _) => ExitApplication());
 
@@ -167,6 +174,7 @@ public sealed class MainForm : Form
         {
             await Task.Delay(100);
             ValidateCurrentClipboard();
+            await CheckForUpdatesAsync(userInitiated: false);
         };
     }
 
@@ -272,7 +280,7 @@ public sealed class MainForm : Form
 
     private async Task RunAutomationAsync()
     {
-        if (_automationRunning)
+        if (_automationRunning || _updatePromptOpen)
         {
             return;
         }
@@ -340,6 +348,129 @@ public sealed class MainForm : Form
             _automationRunning = false;
             _runButton.Enabled = true;
             _ignoreClipboardUntilUtc = DateTime.UtcNow.AddSeconds(2);
+        }
+    }
+
+    private async Task CheckForUpdatesAsync(bool userInitiated)
+    {
+        if (_updateCheckRunning)
+        {
+            return;
+        }
+
+        if (_automationRunning)
+        {
+            if (userInitiated)
+            {
+                MessageBox.Show(
+                    "Wait for the current SAP paste to finish before checking for updates.",
+                    "Update check",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+
+            return;
+        }
+
+        if (!userInitiated &&
+            !_updateStateService.IsAutomaticCheckDue(TimeSpan.FromHours(12)))
+        {
+            return;
+        }
+
+        _updateCheckRunning = true;
+        _updateButton.Enabled = false;
+        var checkAttempted = false;
+        try
+        {
+            checkAttempted = true;
+            var update = await _updateService.CheckForUpdateAsync();
+            if (update is null)
+            {
+                if (userInitiated)
+                {
+                    MessageBox.Show(
+                        $"You already have the newest version ({UpdateService.CurrentVersion}).",
+                        "No update available",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+
+                return;
+            }
+
+            if (_automationRunning)
+            {
+                checkAttempted = false;
+                return;
+            }
+
+            string? installerPath;
+            _updatePromptOpen = true;
+            try
+            {
+                using var updateForm = new UpdateForm(update, _updateService);
+                var result = Visible
+                    ? updateForm.ShowDialog(this)
+                    : updateForm.ShowDialog();
+                if (result != DialogResult.OK || string.IsNullOrWhiteSpace(updateForm.InstallerPath))
+                {
+                    return;
+                }
+
+                installerPath = updateForm.InstallerPath;
+            }
+            finally
+            {
+                _updatePromptOpen = false;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(installerPath)
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                AppLogger.Error("UPDATE_INSTALLER_LAUNCH_ERROR", exception.Message, exception);
+                MessageBox.Show(
+                    $"The update was downloaded and verified, but the setup wizard could not be opened.\r\n\r\n{exception.Message}",
+                    "Unable to open update",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                return;
+            }
+
+            _allowExit = true;
+            _trayIcon.Visible = false;
+            Application.Exit();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error("UPDATE_CHECK_ERROR", exception.Message, exception);
+            if (userInitiated)
+            {
+                MessageBox.Show(
+                    $"Unable to check for updates.\r\n\r\n{exception.Message}",
+                    "Update check failed",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+        finally
+        {
+            if (checkAttempted)
+            {
+                _updateStateService.RecordCheck();
+            }
+
+            _updateCheckRunning = false;
+            if (!IsDisposed)
+            {
+                _updateButton.Enabled = true;
+            }
         }
     }
 

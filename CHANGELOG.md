@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.5
+
+- Removed Supplier Mapping from the workflow and interface.
+- The exact Supplier Name from Excel is now pasted directly into the calibrated SAP Supplier field.
+- Missing mapping files no longer block clipboard readiness or hotkey execution.
+- Existing local `supplier_mapping.csv` files are preserved during updates but are no longer read.
+
 ## 0.1.0-beta.4
 
 - Added a persistent custom global hotkey picker, available from the main status panel and tray menu.

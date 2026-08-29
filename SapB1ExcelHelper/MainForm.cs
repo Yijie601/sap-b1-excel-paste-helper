@@ -9,7 +9,6 @@ public sealed class MainForm : Form
     private const int HotkeyId = 0xB101;
 
     private readonly ExcelClipboardParser _parser = new();
-    private readonly SupplierMappingService _mappingService = new();
     private readonly CalibrationService _calibrationService = new();
     private readonly HotkeySettingsService _hotkeySettingsService = new();
     private readonly SapWindowService _windowService = new();
@@ -22,7 +21,6 @@ public sealed class MainForm : Form
     private readonly Label _statusLabel;
     private readonly Label _invoiceLabel;
     private readonly Label _sapLabel;
-    private readonly Label _mappingCountLabel;
     private readonly LinkLabel _hotkeyLabel;
     private readonly Button _runButton;
     private readonly Button _updateButton;
@@ -99,24 +97,18 @@ public sealed class MainForm : Form
             AutoSize = true,
             Location = new Point(22, 92)
         };
-        _mappingCountLabel = new Label
-        {
-            Text = $"Supplier mappings: {_mappingService.Count}",
-            AutoSize = true,
-            Location = new Point(240, 92)
-        };
         _hotkeyLabel = new LinkLabel
         {
             AutoEllipsis = true,
-            Location = new Point(385, 88),
-            Size = new Size(155, 28),
+            Location = new Point(300, 88),
+            Size = new Size(240, 28),
             TextAlign = ContentAlignment.MiddleRight,
             Anchor = AnchorStyles.Top | AnchorStyles.Right
         };
         _hotkeyLabel.LinkClicked += (_, _) => OpenHotkeySettings();
         statusPanel.Controls.AddRange(new Control[]
         {
-            _statusLabel, _invoiceLabel, _sapLabel, _mappingCountLabel, _hotkeyLabel
+            _statusLabel, _invoiceLabel, _sapLabel, _hotkeyLabel
         });
 
         _runButton = CreateButton(string.Empty, 30, 278, 170);
@@ -125,8 +117,8 @@ public sealed class MainForm : Form
         _runButton.FlatAppearance.BorderSize = 0;
         _runButton.Click += async (_, _) => await RunAutomationAsync();
 
-        var mappingButton = CreateButton("Supplier Mapping", 210, 278, 180);
-        mappingButton.Click += (_, _) => OpenSupplierMappings();
+        var hotkeyButton = CreateButton("Hotkey Settings", 210, 278, 180);
+        hotkeyButton.Click += (_, _) => OpenHotkeySettings();
 
         var calibrationButton = CreateButton("Calibration", 400, 278, 192);
         calibrationButton.Click += (_, _) => OpenCalibration();
@@ -143,14 +135,13 @@ public sealed class MainForm : Form
         Controls.AddRange(new Control[]
         {
             header, _subtitleLabel, statusPanel, _runButton,
-            mappingButton, calibrationButton, logsButton, _updateButton, minimizeButton
+            hotkeyButton, calibrationButton, logsButton, _updateButton, minimizeButton
         });
 
         var trayMenu = new ContextMenuStrip();
         trayMenu.Items.Add("Open", null, (_, _) => RestoreFromTray());
         _trayRunItem = new ToolStripMenuItem(string.Empty, null, async (_, _) => await RunAutomationAsync());
         trayMenu.Items.Add(_trayRunItem);
-        trayMenu.Items.Add("Supplier Mapping", null, (_, _) => OpenSupplierMappings());
         trayMenu.Items.Add("Calibration", null, (_, _) => OpenCalibration());
         trayMenu.Items.Add("Hotkey Settings...", null, (_, _) => OpenHotkeySettings());
         trayMenu.Items.Add("Check for Updates", null, async (_, _) => await CheckForUpdatesAsync(userInitiated: true));
@@ -256,14 +247,7 @@ public sealed class MainForm : Form
 
         try
         {
-            _mappingService.Reload();
             var invoice = _parser.Parse(text);
-            if (!_mappingService.TryResolve(invoice.SupplierName, out var supplierCode))
-            {
-                throw new ClipboardValidationException($"Supplier mapping not found: {invoice.SupplierName}");
-            }
-
-            invoice.SupplierCode = supplierCode;
             _preparedInvoice = invoice;
             _lastValidationError = string.Empty;
             SetReady(invoice);
@@ -326,7 +310,6 @@ public sealed class MainForm : Form
 
             AppLogger.Success(
                 invoice.SupplierName,
-                invoice.SupplierCode,
                 invoice.DocumentNumber,
                 result.ItemRows,
                 result.Duration);
@@ -338,7 +321,6 @@ public sealed class MainForm : Form
             started.Stop();
             AppLogger.Failure(
                 invoice.SupplierName,
-                invoice.SupplierCode,
                 invoice.DocumentNumber,
                 invoice.Items.Count,
                 started.Elapsed,
@@ -482,7 +464,7 @@ public sealed class MainForm : Form
         _statusLabel.Text = "● Ready";
         _statusLabel.ForeColor = Color.FromArgb(22, 125, 72);
         _invoiceLabel.Text = detail ??
-            $"{invoice.DocumentNumber}  •  {invoice.SupplierName} → {invoice.SupplierCode}  •  {invoice.Items.Count} row(s)  •  {invoice.SapDate}";
+            $"{invoice.DocumentNumber}  •  {invoice.SupplierName}  •  {invoice.Items.Count} row(s)  •  {invoice.SapDate}";
     }
 
     private void SetNotReady(string message, bool keepInvoice = false)
@@ -527,17 +509,6 @@ public sealed class MainForm : Form
         "SAP B1 Excel Helper",
         MessageBoxButtons.OK,
         MessageBoxIcon.Error);
-
-    private void OpenSupplierMappings()
-    {
-        using var form = new SupplierMappingForm(_mappingService);
-        if (form.ShowDialog(this) == DialogResult.OK)
-        {
-            _mappingService.Reload();
-            _mappingCountLabel.Text = $"Supplier mappings: {_mappingService.Count}";
-            ValidateCurrentClipboard();
-        }
-    }
 
     private void OpenCalibration()
     {

@@ -33,7 +33,7 @@ public sealed class SapAutomationService
         try
         {
             progress?.Invoke("Filling Supplier...");
-            await FillTextField(window, calibration.Supplier, invoice.SupplierCode);
+            await FillTextField(window, calibration.Supplier, invoice.SapSupplierValue);
             InputService.Tab();
             await WaitUntilReady(window, TimeSpan.FromMilliseconds(220), TimeSpan.FromSeconds(2.5));
 

@@ -4,7 +4,7 @@ SetCompressor /SOLID lzma
 !include "MUI2.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.1.0-beta.4"
+  !define APP_VERSION "0.1.0-beta.5"
 !endif
 
 !define APP_NAME "SAP B1 Excel Helper"
@@ -20,7 +20,7 @@ InstallDirRegKey HKCU "${APP_REGISTRY_KEY}" "InstallLocation"
 RequestExecutionLevel user
 BrandingText "SAP B1 Excel Helper"
 
-VIProductVersion "0.1.0.4"
+VIProductVersion "0.1.0.5"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 VIAddVersionKey "CompanyName" "${APP_PUBLISHER}"

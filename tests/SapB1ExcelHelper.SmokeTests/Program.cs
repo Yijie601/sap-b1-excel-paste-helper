@@ -7,7 +7,7 @@ var tests = new (string Name, Action Run)[]
     ("Rejects multiple invoices", RejectsMultipleInvoices),
     ("Rejects Excel headers", RejectsHeader),
     ("Rejects an incorrect column count", RejectsWrongColumnCount),
-    ("Loads, saves, and resolves supplier CSV values", HandlesSupplierMappings),
+    ("Uses the Excel supplier name directly", UsesSupplierNameDirectly),
     ("Compares stable and prerelease semantic versions", ComparesSemanticVersions),
     ("Selects the newest compatible GitHub release asset", SelectsNewestUpdate),
     ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest),
@@ -80,29 +80,26 @@ static void RejectsWrongColumnCount()
         "13 columns");
 }
 
-static void HandlesSupplierMappings()
+static void UsesSupplierNameDirectly()
 {
-    var temporaryDirectory = Path.Combine(Path.GetTempPath(), $"sap-helper-tests-{Guid.NewGuid():N}");
-    Directory.CreateDirectory(temporaryDirectory);
-    var file = Path.Combine(temporaryDirectory, "mapping.csv");
-    try
-    {
-        File.WriteAllText(file, "Supplier Name,SAP Code\r\n\"Supplier, Sdn Bhd\",V100\r\n");
-        var service = new SupplierMappingService(file);
-        True(service.TryResolve("supplier, sdn bhd", out var code), "Case-insensitive mapping was not found.");
-        Equal("V100", code);
+    var parser = new ExcelClipboardParser();
+    var invoice = parser.Parse(Row(
+        "Supplier Name From Excel",
+        "13-08-2026",
+        "REF",
+        "ITEM",
+        "OUTLET",
+        "1",
+        "1",
+        "1",
+        "SST",
+        "",
+        "0",
+        "",
+        "WH01"));
 
-        service.Save(new[]
-        {
-            new SupplierMappingEntry("  New Supplier  ", " V200 ")
-        });
-        True(service.TryResolve("NEW SUPPLIER", out code), "Saved mapping was not found.");
-        Equal("V200", code);
-    }
-    finally
-    {
-        Directory.Delete(temporaryDirectory, true);
-    }
+    Equal("Supplier Name From Excel", invoice.SupplierName);
+    Equal(invoice.SupplierName, invoice.SapSupplierValue);
 }
 
 static void ComparesSemanticVersions()

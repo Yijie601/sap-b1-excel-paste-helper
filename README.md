@@ -31,6 +31,8 @@ Open **Calibration**. For each field:
 
 Coordinates are stored relative to the AP Invoice window, so moving the SAP window does not invalidate calibration. A resolution or SAP layout change may require recalibration.
 
+All six positions must show a green check before **Test Calibration**, **Save**, or the global hotkey can run. Versions before beta 7 stored unverified built-in coordinates; after updating, capture all six positions once so the helper cannot enter Supplier data into an incorrect field.
+
 During capture, the helper identifies the SAP A/P Invoice from the window directly underneath your click; it does not depend on Windows completing a foreground-focus change first. Both `AP Invoice` and `A/P Invoice` window titles are supported.
 
 ## Clipboard validation
@@ -76,7 +78,7 @@ Requirements:
 ```powershell
 dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
 dotnet publish .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish
-& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.6 .\installer\SapB1ExcelHelper.nsi
+& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.7 .\installer\SapB1ExcelHelper.nsi
 ```
 
 ## Publishing a new version

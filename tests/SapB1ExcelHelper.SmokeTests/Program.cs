@@ -1,8 +1,11 @@
+using System.Text.Json;
+using SapB1ExcelHelper.Models;
 using SapB1ExcelHelper.Services;
 
 var tests = new (string Name, Action Run)[]
 {
     ("Parses valid multi-row invoice and preserves blank columns", ParsesValidInvoice),
+    ("Starts the COL33 item paste at SAP Code instead of Supplier Name", BuildsExpectedCol33ItemBlock),
     ("Supports every documented date format", SupportsDateFormats),
     ("Rejects multiple invoices", RejectsMultipleInvoices),
     ("Rejects Excel headers", RejectsHeader),
@@ -12,7 +15,8 @@ var tests = new (string Name, Action Run)[]
     ("Selects the newest compatible GitHub release asset", SelectsNewestUpdate),
     ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest),
     ("Validates and persists custom global hotkeys", HandlesCustomHotkeys),
-    ("Recognizes SAP AP and A/P Invoice titles", RecognizesApInvoiceTitles)
+    ("Recognizes SAP AP and A/P Invoice titles", RecognizesApInvoiceTitles),
+    ("Requires every SAP position to be captured explicitly", RequiresCompleteCalibration)
 };
 
 var failures = 0;
@@ -56,6 +60,48 @@ static void SupportsDateFormats()
         var invoice = parser.Parse(Row("Supplier", date, "REF", "I", "O", "1", "1", "1", "V", "", "0", "", "W"));
         Equal("13.08.26", invoice.SapDate);
     }
+}
+
+static void BuildsExpectedCol33ItemBlock()
+{
+    var parser = new ExcelClipboardParser();
+    var row1 = Row(
+        "COL33 PTE.LTD",
+        "03-08-2026",
+        "COL26080630_F",
+        "PROC-Chives&PorkDumplings",
+        "O-HW",
+        "15",
+        "",
+        "7.5",
+        "TX7",
+        "",
+        "",
+        "",
+        "S-HW");
+    var row2 = Row(
+        "COL33 PTE.LTD",
+        "03-08-2026",
+        "COL26080630_F",
+        "PROC-Chives&PorkDumplings",
+        "O-HW",
+        "3",
+        "",
+        "0",
+        "TX7",
+        "",
+        "",
+        "",
+        "S-HW");
+
+    var invoice = parser.Parse(row1 + "\r\n" + row2);
+    Equal("COL33 PTE.LTD", invoice.SapSupplierValue);
+    Equal("COL26080630_F", invoice.DocumentNumber);
+    Equal("03.08.26", invoice.SapDate);
+    Equal(
+        "PROC-Chives&PorkDumplings\tO-HW\t15\t\t7.5\tTX7\t\t\t\tS-HW\r\n" +
+        "PROC-Chives&PorkDumplings\tO-HW\t3\t\t0\tTX7\t\t\t\tS-HW",
+        invoice.ItemClipboardBlock);
 }
 
 static void RejectsMultipleInvoices()
@@ -217,6 +263,34 @@ static void RecognizesApInvoiceTitles()
     True(SapWindowService.IsApInvoiceTitle("A/P Invoice"), "Standard SAP A/P title was not recognized.");
     True(SapWindowService.IsApInvoiceTitle("AP Invoice - Vendor"), "AP title without slash was not recognized.");
     True(!SapWindowService.IsApInvoiceTitle("Sales Order"), "An unrelated SAP window was accepted.");
+}
+
+static void RequiresCompleteCalibration()
+{
+    var calibration = new SapCalibration();
+    True(!calibration.IsComplete, "Default coordinates must not count as captured positions.");
+    Equal(6, calibration.MissingFields.Count);
+
+    calibration.SupplierCaptured = true;
+    calibration.SupplierRefCaptured = true;
+    calibration.PostingDateCaptured = true;
+    calibration.DocumentDateCaptured = true;
+    calibration.RemarksCaptured = true;
+    calibration.ItemNoCaptured = true;
+    True(calibration.IsComplete, "All six captured positions should complete calibration.");
+    True(calibration.Clone().IsComplete, "Cloning lost the captured-state flags.");
+
+    const string legacyJson = """
+        {
+          "supplier": { "x": 249, "y": 62 },
+          "itemNo": { "x": 536, "y": 283 }
+        }
+        """;
+    var legacyCalibration = JsonSerializer.Deserialize<SapCalibration>(
+        legacyJson,
+        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    True(legacyCalibration is not null && !legacyCalibration.IsComplete,
+        "A legacy default-coordinate file must require fresh calibration.");
 }
 
 static string Row(params string[] cells)

@@ -28,6 +28,7 @@ public sealed class MainForm : Form
 
     private HotkeyDefinition _hotkey;
     private InvoiceClipboardData? _preparedInvoice;
+    private CalibrationForm? _calibrationForm;
     private string _lastValidationError = "Copy Excel columns B:N first.";
     private DateTime _ignoreClipboardUntilUtc;
     private bool _automationRunning;
@@ -286,6 +287,15 @@ public sealed class MainForm : Form
             return;
         }
 
+        var calibration = _calibrationService.Load();
+        if (!calibration.IsComplete)
+        {
+            var missing = string.Join(", ", calibration.MissingFields);
+            ShowError($"Calibration is incomplete. Capture these SAP positions first:\r\n\r\n{missing}");
+            OpenCalibration();
+            return;
+        }
+
         if (!_windowService.TryGetActiveApInvoice(out var sapWindow, out var windowError))
         {
             ShowError(windowError);
@@ -301,7 +311,6 @@ public sealed class MainForm : Form
 
         try
         {
-            var calibration = _calibrationService.Load();
             var result = await _automationService.RunAsync(
                 invoice,
                 sapWindow!,
@@ -512,8 +521,23 @@ public sealed class MainForm : Form
 
     private void OpenCalibration()
     {
-        using var form = new CalibrationForm(_calibrationService, _windowService);
-        form.ShowDialog(this);
+        if (_calibrationForm is { IsDisposed: false })
+        {
+            _calibrationForm.Show();
+            _calibrationForm.Activate();
+            return;
+        }
+
+        var form = new CalibrationForm(_calibrationService, _windowService);
+        _calibrationForm = form;
+        form.FormClosed += (_, _) =>
+        {
+            if (ReferenceEquals(_calibrationForm, form))
+            {
+                _calibrationForm = null;
+            }
+        };
+        form.Show(this);
     }
 
     private void OpenHotkeySettings()
@@ -641,6 +665,11 @@ public sealed class MainForm : Form
         }
 
         _sapStatusTimer.Stop();
+        if (_calibrationForm is { IsDisposed: false })
+        {
+            _calibrationForm.Close();
+        }
+
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
     }

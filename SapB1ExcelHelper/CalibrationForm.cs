@@ -58,12 +58,36 @@ public sealed class CalibrationForm : Form
             table.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         }
         AddHeader(table, "SAP field", "Relative X / Y", "Action");
-        AddCalibrationRow(table, 1, "Supplier", () => _calibration.Supplier, point => _calibration.Supplier = point);
-        AddCalibrationRow(table, 2, "Supplier Ref.", () => _calibration.SupplierRef, point => _calibration.SupplierRef = point);
-        AddCalibrationRow(table, 3, "Posting Date", () => _calibration.PostingDate, point => _calibration.PostingDate = point);
-        AddCalibrationRow(table, 4, "Document Date", () => _calibration.DocumentDate, point => _calibration.DocumentDate = point);
-        AddCalibrationRow(table, 5, "Remarks", () => _calibration.Remarks, point => _calibration.Remarks = point);
-        AddCalibrationRow(table, 6, "First Item No.", () => _calibration.ItemNo, point => _calibration.ItemNo = point);
+        AddCalibrationRow(table, 1, "Supplier", point =>
+        {
+            _calibration.Supplier = point;
+            _calibration.SupplierCaptured = true;
+        });
+        AddCalibrationRow(table, 2, "Supplier Ref.", point =>
+        {
+            _calibration.SupplierRef = point;
+            _calibration.SupplierRefCaptured = true;
+        });
+        AddCalibrationRow(table, 3, "Posting Date", point =>
+        {
+            _calibration.PostingDate = point;
+            _calibration.PostingDateCaptured = true;
+        });
+        AddCalibrationRow(table, 4, "Document Date", point =>
+        {
+            _calibration.DocumentDate = point;
+            _calibration.DocumentDateCaptured = true;
+        });
+        AddCalibrationRow(table, 5, "Remarks", point =>
+        {
+            _calibration.Remarks = point;
+            _calibration.RemarksCaptured = true;
+        });
+        AddCalibrationRow(table, 6, "First Item No.", point =>
+        {
+            _calibration.ItemNo = point;
+            _calibration.ItemNoCaptured = true;
+        });
 
         _statusLabel = new Label
         {
@@ -76,12 +100,12 @@ public sealed class CalibrationForm : Form
 
         var testButton = CreateButton("Test Calibration", 25, 420, 160);
         testButton.Click += async (_, _) => await TestCalibrationAsync();
-        var resetButton = CreateButton("Reset Defaults", 195, 420, 145);
+        var resetButton = CreateButton("Clear All", 195, 420, 145);
         resetButton.Click += (_, _) =>
         {
             _calibration = new SapCalibration();
             RefreshCoordinateLabels();
-            _statusLabel.Text = "Default coordinates restored. Click Save to keep them.";
+            _statusLabel.Text = "All captured positions cleared.";
         };
         var saveButton = CreateButton("Save", 350, 420, 95);
         saveButton.BackColor = Color.FromArgb(31, 106, 68);
@@ -89,6 +113,11 @@ public sealed class CalibrationForm : Form
         saveButton.FlatAppearance.BorderSize = 0;
         saveButton.Click += (_, _) =>
         {
+            if (!EnsureComplete("saving"))
+            {
+                return;
+            }
+
             _calibrationService.Save(_calibration);
             DialogResult = DialogResult.OK;
             Close();
@@ -108,7 +137,6 @@ public sealed class CalibrationForm : Form
         TableLayoutPanel table,
         int row,
         string name,
-        Func<SapPoint> getPoint,
         Action<SapPoint> setPoint)
     {
         var nameLabel = new Label { Text = name, AutoSize = true, Anchor = AnchorStyles.Left };
@@ -200,18 +228,18 @@ public sealed class CalibrationForm : Form
         finally
         {
             instruction.Close();
-            if (!IsDisposed && !Visible)
-            {
-                Show();
-                Activate();
-            }
-
+            RestoreAfterTemporaryHide();
             _capturing = false;
         }
     }
 
     private async Task TestCalibrationAsync()
     {
+        if (!EnsureComplete("testing"))
+        {
+            return;
+        }
+
         if (!_windowService.TryFindOpenApInvoice(out var window))
         {
             MessageBox.Show(
@@ -246,24 +274,63 @@ public sealed class CalibrationForm : Form
         finally
         {
             instruction.Close();
-            Show();
-            Activate();
-            _statusLabel.Text = "Test complete. No fields were clicked or changed.";
+            RestoreAfterTemporaryHide();
+            if (!IsDisposed && !Disposing)
+            {
+                _statusLabel.Text = "Test complete. No fields were clicked or changed.";
+            }
         }
     }
 
     private void RefreshCoordinateLabels()
     {
-        SetCoordinate("Supplier", _calibration.Supplier);
-        SetCoordinate("Supplier Ref.", _calibration.SupplierRef);
-        SetCoordinate("Posting Date", _calibration.PostingDate);
-        SetCoordinate("Document Date", _calibration.DocumentDate);
-        SetCoordinate("Remarks", _calibration.Remarks);
-        SetCoordinate("First Item No.", _calibration.ItemNo);
+        SetCoordinate("Supplier", _calibration.Supplier, _calibration.SupplierCaptured);
+        SetCoordinate("Supplier Ref.", _calibration.SupplierRef, _calibration.SupplierRefCaptured);
+        SetCoordinate("Posting Date", _calibration.PostingDate, _calibration.PostingDateCaptured);
+        SetCoordinate("Document Date", _calibration.DocumentDate, _calibration.DocumentDateCaptured);
+        SetCoordinate("Remarks", _calibration.Remarks, _calibration.RemarksCaptured);
+        SetCoordinate("First Item No.", _calibration.ItemNo, _calibration.ItemNoCaptured);
     }
 
-    private void SetCoordinate(string name, SapPoint point) =>
-        _coordinateLabels[name].Text = $"{point.X}, {point.Y}";
+    private void SetCoordinate(string name, SapPoint point, bool captured)
+    {
+        var label = _coordinateLabels[name];
+        label.Text = captured ? $"{point.X}, {point.Y}  ✓" : "Not captured";
+        label.ForeColor = captured
+            ? Color.FromArgb(22, 125, 72)
+            : Color.FromArgb(177, 63, 48);
+    }
+
+    private bool EnsureComplete(string action)
+    {
+        if (_calibration.IsComplete)
+        {
+            return true;
+        }
+
+        var missing = string.Join(", ", _calibration.MissingFields);
+        MessageBox.Show(
+            $"Capture every SAP position before {action}.\r\n\r\nStill missing: {missing}",
+            "Calibration incomplete",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+        return false;
+    }
+
+    private void RestoreAfterTemporaryHide()
+    {
+        if (IsDisposed || Disposing)
+        {
+            return;
+        }
+
+        if (!Visible)
+        {
+            Show();
+        }
+
+        Activate();
+    }
 }
 
 internal sealed class CaptureInstructionForm : Form

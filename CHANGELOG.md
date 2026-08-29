@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-beta.7
+
+- Fixed `Test Calibration` and `Capture` closing and disposing the calibration window while it was temporarily hidden.
+- Calibration now safely hides and returns as a modeless owned window.
+- All six SAP positions must be explicitly captured before calibration can be tested, saved, or used by the global hotkey.
+- Legacy built-in coordinates are treated as uncalibrated so a Supplier value cannot be entered into the wrong SAP field.
+- Added a regression case for the COL33 invoice to verify the item paste starts at SAP Code, not Supplier Name.
+
 ## 0.1.0-beta.6
 
 - Fixed calibration capture incorrectly reporting that SAP was inactive before Windows completed its focus change.

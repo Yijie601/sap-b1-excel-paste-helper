@@ -306,15 +306,16 @@ static void RequiresCompleteCalibration()
 {
     var calibration = new SapCalibration();
     True(!calibration.IsComplete, "Default coordinates must not count as captured positions.");
-    Equal(4, calibration.MissingFields.Count);
+    Equal(5, calibration.MissingFields.Count);
 
     calibration.SupplierCaptured = true;
+    calibration.SupplierRefCaptured = true;
     calibration.PostingDateCaptured = true;
     calibration.RemarksCaptured = true;
     calibration.ItemNoCaptured = true;
     True(!calibration.IsComplete, "Legacy relative coordinates must not pass absolute desktop calibration.");
     calibration.CoordinateVersion = SapCalibration.AbsoluteDesktopCoordinateVersion;
-    True(calibration.IsComplete, "All four captured positions should complete calibration.");
+    True(calibration.IsComplete, "All five captured positions should complete calibration.");
     True(calibration.Clone().IsComplete, "Cloning lost the captured-state flags.");
 
     const string legacyJson = """
@@ -350,7 +351,28 @@ static void RequiresCompleteCalibration()
         beta8Json,
         new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
     True(beta8Calibration is not null && beta8Calibration.IsComplete,
-        "Existing beta 8 absolute coordinates for the four required click targets should remain valid.");
+        "Existing beta 8 absolute coordinates for the five required click targets should remain valid.");
+
+    const string beta10Json = """
+        {
+          "coordinateVersion": 2,
+          "supplier": { "x": 160, "y": 40 },
+          "postingDate": { "x": 1720, "y": 75 },
+          "remarks": { "x": 240, "y": 770 },
+          "itemNo": { "x": 520, "y": 260 },
+          "supplierCaptured": true,
+          "postingDateCaptured": true,
+          "remarksCaptured": true,
+          "itemNoCaptured": true
+        }
+        """;
+    var beta10Calibration = JsonSerializer.Deserialize<SapCalibration>(
+        beta10Json,
+        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    True(beta10Calibration is not null && !beta10Calibration.IsComplete,
+        "A four-point beta 10 calibration must request the new Supplier Ref. click target.");
+    True(beta10Calibration!.MissingFields.SequenceEqual(new[] { "Supplier Ref." }),
+        "Only Supplier Ref. should be missing from a complete beta 10 calibration.");
 }
 
 static string Row(params string[] cells)

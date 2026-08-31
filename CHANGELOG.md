@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.11
+
+- Removed simulated Tab keys from the SAP paste flow because the target SAP client can reject synthetic Tab input.
+- Restored Supplier Ref. as a calibrated absolute desktop position.
+- Corrected the coordinate-click order to Supplier, Posting Date, Supplier Ref., Remarks, and First Item No.; the helper waits for SAP processing after Posting Date before continuing to Supplier Ref.
+- Calibration now requires five click targets; beta 8 configurations that still contain Supplier Ref. remain compatible, while beta 9/10 configurations request only the missing Supplier Ref. position.
+
 ## 0.1.0-beta.10
 
 - Changed each Supplier navigation Tab into a human-like key press with separate key-down, 110 ms hold, key-up, and 220 ms release delays so SAP Business One cannot miss an instantaneous key tap.

@@ -22,8 +22,8 @@ public sealed class CalibrationForm : Form
 
         Text = "SAP Calibration";
         StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(590, 455);
-        MinimumSize = new Size(590, 455);
+        Size = new Size(590, 495);
+        MinimumSize = new Size(590, 495);
         MaximizeBox = false;
         Font = new Font("Segoe UI", 10F);
 
@@ -36,7 +36,7 @@ public sealed class CalibrationForm : Form
         };
         var instructions = new Label
         {
-            Text = "Capture the four click targets below. Supplier Ref. uses two Tabs; Document Date updates automatically.\nKeep SAP in the same desktop position after calibration.",
+            Text = "Capture the five click targets below. Supplier Ref. is clicked directly; Document Date updates automatically.\nKeep SAP in the same desktop position after calibration.",
             ForeColor = Color.FromArgb(85, 91, 101),
             AutoSize = true,
             Location = new Point(25, 58)
@@ -45,16 +45,16 @@ public sealed class CalibrationForm : Form
         var table = new TableLayoutPanel
         {
             ColumnCount = 3,
-            RowCount = 5,
+            RowCount = 6,
             Location = new Point(25, 115),
-            Size = new Size(525, 185),
+            Size = new Size(525, 220),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        for (var row = 1; row < 5; row++)
+        for (var row = 1; row < 6; row++)
         {
             table.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         }
@@ -64,17 +64,22 @@ public sealed class CalibrationForm : Form
             _calibration.Supplier = point;
             _calibration.SupplierCaptured = true;
         });
-        AddCalibrationRow(table, 2, "Posting Date", point =>
+        AddCalibrationRow(table, 2, "Supplier Ref.", point =>
+        {
+            _calibration.SupplierRef = point;
+            _calibration.SupplierRefCaptured = true;
+        });
+        AddCalibrationRow(table, 3, "Posting Date", point =>
         {
             _calibration.PostingDate = point;
             _calibration.PostingDateCaptured = true;
         });
-        AddCalibrationRow(table, 3, "Remarks", point =>
+        AddCalibrationRow(table, 4, "Remarks", point =>
         {
             _calibration.Remarks = point;
             _calibration.RemarksCaptured = true;
         });
-        AddCalibrationRow(table, 4, "First Item No.", point =>
+        AddCalibrationRow(table, 5, "First Item No.", point =>
         {
             _calibration.ItemNo = point;
             _calibration.ItemNoCaptured = true;
@@ -85,20 +90,20 @@ public sealed class CalibrationForm : Form
             Text = "Ready to capture.",
             ForeColor = Color.FromArgb(85, 91, 101),
             AutoEllipsis = true,
-            Location = new Point(27, 312),
+            Location = new Point(27, 348),
             Size = new Size(520, 26)
         };
 
-        var testButton = CreateButton("Test Calibration", 25, 350, 160);
+        var testButton = CreateButton("Test Calibration", 25, 386, 160);
         testButton.Click += async (_, _) => await TestCalibrationAsync();
-        var resetButton = CreateButton("Clear All", 195, 350, 145);
+        var resetButton = CreateButton("Clear All", 195, 386, 145);
         resetButton.Click += (_, _) =>
         {
             _calibration = new SapCalibration();
             RefreshCoordinateLabels();
             _statusLabel.Text = "All captured positions cleared.";
         };
-        var saveButton = CreateButton("Save", 350, 350, 95);
+        var saveButton = CreateButton("Save", 350, 386, 95);
         saveButton.BackColor = Color.FromArgb(31, 106, 68);
         saveButton.ForeColor = Color.White;
         saveButton.FlatAppearance.BorderSize = 0;
@@ -113,7 +118,7 @@ public sealed class CalibrationForm : Form
             DialogResult = DialogResult.OK;
             Close();
         };
-        var cancelButton = CreateButton("Cancel", 455, 350, 95);
+        var cancelButton = CreateButton("Cancel", 455, 386, 95);
         cancelButton.Click += (_, _) => Close();
 
         Controls.AddRange(new Control[]
@@ -224,6 +229,7 @@ public sealed class CalibrationForm : Form
         var points = new[]
         {
             ("Supplier", _calibration.Supplier),
+            ("Supplier Ref.", _calibration.SupplierRef),
             ("Posting Date", _calibration.PostingDate),
             ("Remarks", _calibration.Remarks),
             ("First Item No.", _calibration.ItemNo)
@@ -254,6 +260,7 @@ public sealed class CalibrationForm : Form
     private void RefreshCoordinateLabels()
     {
         SetCoordinate("Supplier", _calibration.Supplier, _calibration.SupplierCaptured);
+        SetCoordinate("Supplier Ref.", _calibration.SupplierRef, _calibration.SupplierRefCaptured);
         SetCoordinate("Posting Date", _calibration.PostingDate, _calibration.PostingDateCaptured);
         SetCoordinate("Remarks", _calibration.Remarks, _calibration.RemarksCaptured);
         SetCoordinate("First Item No.", _calibration.ItemNo, _calibration.ItemNoCaptured);

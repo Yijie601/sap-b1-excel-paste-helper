@@ -311,16 +311,8 @@ LIM SOON POH TRADING
 Supplier
 ```
 
-输入 Supplier 后：
-
-```text
-TAB
-等待 SAP commit Supplier
-TAB
-```
-
-第二次 TAB 后焦点会停在 Supplier Ref.，不需要点击 Supplier Ref. 坐标。
-两个 TAB 都必须使用分开的 key-down / 短暂停留 / key-up，避免 SAP 忽略同一瞬间完成的按键。
+输入 Supplier 后不发送 TAB。下一步直接点击 Posting Date 并输入日期，让离开 Supplier
+字段的动作触发 SAP commit；等待 SAP 完成 Supplier/date processing 后，再点击 Supplier Ref.。
 
 SAP 之后会加载：
 
@@ -334,7 +326,7 @@ etc.
 
 ### Supplier Ref. No.
 
-在第二次 TAB 后直接粘贴：
+点击已校准的 Supplier Ref. 坐标后粘贴：
 
 ```text
 Document Number
@@ -466,6 +458,7 @@ ClassName: TMEditTextClass
 
 ```text
 Supplier
+Supplier Ref.
 Posting Date
 Remarks
 First Item No.
@@ -499,6 +492,7 @@ AP Invoice window rectangle
 
 ```text
 Supplier
+Supplier Ref. No.
 Posting Date
 Remarks
 First Item No.
@@ -526,6 +520,7 @@ Settings：
 SAP Calibration
 
 Supplier          [Capture]
+Supplier Ref.     [Capture]
 Posting Date      [Capture]
 Remarks           [Capture]
 First Item No.    [Capture]
@@ -568,6 +563,7 @@ Y = 62
 {
   "coordinateVersion": 2,
   "supplier": { "x": 249, "y": 62 },
+  "supplierRef": { "x": 249, "y": 97 },
   "postingDate": { "x": 1799, "y": 80 },
   "remarks": { "x": 249, "y": 817 },
   "itemNo": { "x": 536, "y": 283 }
@@ -633,6 +629,7 @@ Test Calibration
 
 ```text
 Supplier
+Supplier Ref.
 Posting Date
 Remarks
 Item No.
@@ -725,25 +722,23 @@ Search Excel then switch SAP
 6. Convert Date
 7. Load absolute-coordinate calibration.json
 8. Paste Supplier once
-9. Press TAB once to commit Supplier
-10. Wait for SAP Supplier loading
-11. Press TAB again to focus Supplier Ref.
-12. Paste Supplier Ref. once without clicking
-13. Click and paste Posting Date once; let SAP update Document Date
-14. Click and paste Remarks once
-15. Build every selected E:N row as one tab-delimited block
-16. Click absolute First Item No. coordinate
-17. Paste the entire E:N block once
-18. Wait for SAP calculation
-19. Restore original Clipboard
-20. Show success notification
-21. STOP
+9. Click and paste Posting Date once; leaving Supplier commits it and SAP updates Document Date
+10. Wait for SAP Supplier/date processing
+11. Click Supplier Ref. and paste Document Number once
+12. Click Remarks and paste Document Number once
+13. Build every selected E:N row as one tab-delimited block
+14. Click absolute First Item No. coordinate
+15. Paste the entire E:N block once
+16. Wait for SAP calculation
+17. Restore original Clipboard
+18. Show success notification
+19. STOP
 ```
 
 绝对不要：
 
 ```text
-22. Add
+20. Add
 ```
 
 ## 20. 输入实现
@@ -820,18 +815,14 @@ Supplier 是唯一比较可能需要等待 SAP 后台处理的地方。
 ```text
 Fill Supplier Code
 ↓
-TAB
+Click and fill Posting Date
 ↓
-SAP loads BP information
+Wait up to the bounded Supplier/date processing delay
 ↓
-继续
+Click and fill Supplier Ref.
 ```
 
-不要固定：
-
-```text
-Sleep 1500ms
-```
+公司 SAP 实机目前使用 bounded 1.8-second wait，优先保证字段完成加载。
 
 应该使用：
 
@@ -1261,7 +1252,7 @@ public class SapCalibration
 ✅ Absolute desktop coordinate targeting
 ✅ calibration.json
 ✅ Supplier
-✅ Supplier Ref. via two-TAB focus sequence
+✅ Supplier Ref. via calibrated direct click
 ✅ Posting Date
 ✅ Document Date auto-update by SAP
 ✅ Remarks

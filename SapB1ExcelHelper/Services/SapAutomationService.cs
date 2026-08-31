@@ -16,7 +16,6 @@ public sealed class SapAutomationService
 {
     private static readonly TimeSpan FieldFocusDelay = TimeSpan.FromMilliseconds(90);
     private static readonly TimeSpan FieldPasteDelay = TimeSpan.FromMilliseconds(120);
-    private static readonly TimeSpan SupplierPasteSettleDelay = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SupplierCommitDelay = TimeSpan.FromMilliseconds(1800);
 
     public async Task<AutomationResult> RunAsync(
@@ -33,20 +32,17 @@ public sealed class SapAutomationService
 
             progress?.Invoke("Filling Supplier...");
             await PasteTextField(calibration.Supplier, invoice.SapSupplierValue);
-            await Task.Delay(SupplierPasteSettleDelay);
 
-            progress?.Invoke("Pressing Tab 1 of 2 — committing Supplier...");
-            await InputService.PressTabAsync();
+            progress?.Invoke("Filling Posting Date...");
+            await PasteTextField(calibration.PostingDate, invoice.SapDate);
+
+            progress?.Invoke("Waiting for SAP Supplier and date processing...");
             await Task.Delay(SupplierCommitDelay);
 
-            progress?.Invoke("Pressing Tab 2 of 2 — opening Supplier Ref...");
-            await InputService.PressTabAsync();
-
             progress?.Invoke("Filling Supplier Ref...");
-            await PasteTextAtCurrentFocus(invoice.DocumentNumber);
+            await PasteTextField(calibration.SupplierRef, invoice.DocumentNumber);
 
-            progress?.Invoke("Filling Posting Date and Remarks...");
-            await PasteTextField(calibration.PostingDate, invoice.SapDate);
+            progress?.Invoke("Filling Remarks...");
             await PasteTextField(calibration.Remarks, invoice.DocumentNumber);
 
             progress?.Invoke($"Pasting {invoice.Items.Count} item row(s)...");
@@ -96,12 +92,13 @@ public sealed class SapAutomationService
     {
         if (!calibration.IsComplete)
         {
-            throw new SapAutomationException("Absolute desktop calibration is incomplete. Capture all four SAP positions again.");
+            throw new SapAutomationException("Absolute desktop calibration is incomplete. Capture all five SAP positions again.");
         }
 
         var points = new[]
         {
             calibration.Supplier,
+            calibration.SupplierRef,
             calibration.PostingDate,
             calibration.Remarks,
             calibration.ItemNo

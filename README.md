@@ -25,13 +25,13 @@ Open **Calibration**. For each field:
 
 1. Click **Capture**.
 2. Click the corresponding real field in SAP.
-3. Repeat for Supplier, Posting Date, Remarks, and the first Item No. cell.
+3. Repeat for Supplier, Supplier Ref., Posting Date, Remarks, and the first Item No. cell.
 4. Use **Test Calibration** to watch the mouse move through the saved positions without clicking or entering data.
 5. Click **Save**.
 
 Coordinates are stored as direct Windows desktop positions. Keep SAP maximized or in the same screen position used during calibration. Recalibrate after moving SAP, changing display scaling, resolution, monitor arrangement, or the SAP layout.
 
-All four positions must show a green check before **Test Calibration**, **Save**, or the global hotkey can run. Beta 8 and newer use absolute coordinates; older relative coordinates are intentionally rejected. Existing beta 8 absolute coordinates for these four fields remain usable.
+All five positions must show a green check before **Test Calibration**, **Save**, or the global hotkey can run. Beta 8 and newer use absolute coordinates; older relative coordinates are intentionally rejected. A beta 9/10 installation normally needs to capture only the newly restored Supplier Ref. position.
 
 During capture, the helper records the exact desktop point you click. During F8 execution it moves to those points directly; it does not depend on the SAP process name, A/P Invoice title, internal window class, or input-control detection.
 
@@ -45,7 +45,7 @@ The helper expects 13 tab-separated columns corresponding to Excel B:N. It valid
 - a nonblank SAP Code / Item No. in column E for every selected row;
 - dates in `dd-MM-yyyy`, `dd/MM/yyyy`, `dd.MM.yyyy`, or `yyyy-MM-dd` format.
 
-The Excel Supplier Name is pasted once into Supplier. The helper then presses Tab, waits for SAP to commit the Supplier, presses Tab again, and pastes the first-row Document Number directly into the focused Supplier Ref. field. It clicks Posting Date and pastes the first-row date once as `dd.MM.yy`; SAP updates Document Date automatically. The Document Number is also pasted once into Remarks. Empty item cells remain in their original positions. Whether there are 2 rows or dozens, all E:N rows are pasted once as one multi-row matrix beginning with column E SAP Code.
+The Excel Supplier Name is pasted once into Supplier. The helper then clicks Posting Date and pastes the first-row date once as `dd.MM.yy`, waits for SAP to finish Supplier/date processing, clicks Supplier Ref. and pastes the first-row Document Number, then clicks Remarks and pastes the same Document Number. No Tab key is sent, and SAP updates Document Date automatically. Empty item cells remain in their original positions. Whether there are 2 rows or dozens, all E:N rows are pasted once as one multi-row matrix beginning with column E SAP Code.
 
 ## Data locations
 
@@ -79,7 +79,7 @@ Requirements:
 ```powershell
 dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
 dotnet publish .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish
-& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.10 .\installer\SapB1ExcelHelper.nsi
+& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.11 .\installer\SapB1ExcelHelper.nsi
 ```
 
 ## Publishing a new version

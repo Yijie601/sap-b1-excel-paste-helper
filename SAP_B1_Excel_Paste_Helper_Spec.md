@@ -299,10 +299,10 @@ Excel：
 LIM SOON POH TRADING
 ```
 
-Mapping 后：
+直接使用 Excel Supplier Name，不做 mapping：
 
 ```text
-VL1002
+LIM SOON POH TRADING
 ```
 
 填写到 SAP：
@@ -315,9 +315,11 @@ Supplier
 
 ```text
 TAB
+等待 SAP commit Supplier
+TAB
 ```
 
-让 SAP commit Supplier。
+第二次 TAB 后焦点会停在 Supplier Ref.，不需要点击 Supplier Ref. 坐标。
 
 SAP 之后会加载：
 
@@ -331,7 +333,7 @@ etc.
 
 ### Supplier Ref. No.
 
-填写：
+在第二次 TAB 后直接粘贴：
 
 ```text
 Document Number
@@ -359,11 +361,7 @@ Document Date
 
 ### Document Date
 
-填写：
-
-```text
-13.08.26
-```
+不再单独点击或填写。输入 Posting Date 后由 SAP 自动更新 Document Date。
 
 ### Remarks
 
@@ -467,9 +465,7 @@ ClassName: TMEditTextClass
 
 ```text
 Supplier
-Supplier Ref.
 Posting Date
-Document Date
 Remarks
 First Item No.
 ```
@@ -502,9 +498,7 @@ AP Invoice window rectangle
 
 ```text
 Supplier
-Supplier Ref. No.
 Posting Date
-Document Date
 Remarks
 First Item No.
 ```
@@ -531,9 +525,7 @@ Settings：
 SAP Calibration
 
 Supplier          [Capture]
-Supplier Ref.     [Capture]
 Posting Date      [Capture]
-Document Date     [Capture]
 Remarks           [Capture]
 First Item No.    [Capture]
 
@@ -575,9 +567,7 @@ Y = 62
 {
   "coordinateVersion": 2,
   "supplier": { "x": 249, "y": 62 },
-  "supplierRef": { "x": 249, "y": 97 },
   "postingDate": { "x": 1799, "y": 80 },
-  "documentDate": { "x": 1799, "y": 115 },
   "remarks": { "x": 249, "y": 817 },
   "itemNo": { "x": 536, "y": 283 }
 }
@@ -642,9 +632,7 @@ Test Calibration
 
 ```text
 Supplier
-Supplier Ref.
 Posting Date
-Document Date
 Remarks
 Item No.
 ```
@@ -736,12 +724,12 @@ Search Excel then switch SAP
 6. Convert Date
 7. Load absolute-coordinate calibration.json
 8. Paste Supplier once
-9. Commit Supplier with TAB
+9. Press TAB once to commit Supplier
 10. Wait for SAP Supplier loading
-11. Paste Supplier Ref. once
-12. Paste Posting Date once
-13. Paste Document Date once
-14. Paste Remarks once
+11. Press TAB again to focus Supplier Ref.
+12. Paste Supplier Ref. once without clicking
+13. Click and paste Posting Date once; let SAP update Document Date
+14. Click and paste Remarks once
 15. Build every selected E:N row as one tab-delimited block
 16. Click absolute First Item No. coordinate
 17. Paste the entire E:N block once
@@ -803,9 +791,7 @@ Prototype 可以使用，但 production 建议使用 Win32 SendInput。
 普通 field：
 
 ```text
-Supplier Ref.
 Posting Date
-Document Date
 Remarks
 ```
 
@@ -1250,9 +1236,7 @@ public class SapPoint
 public class SapCalibration
 {
     public SapPoint Supplier { get; set; }
-    public SapPoint SupplierRef { get; set; }
     public SapPoint PostingDate { get; set; }
-    public SapPoint DocumentDate { get; set; }
     public SapPoint Remarks { get; set; }
     public SapPoint ItemNo { get; set; }
 }
@@ -1276,9 +1260,9 @@ public class SapCalibration
 ✅ Absolute desktop coordinate targeting
 ✅ calibration.json
 ✅ Supplier
-✅ Supplier Ref.
+✅ Supplier Ref. via two-TAB focus sequence
 ✅ Posting Date
-✅ Document Date
+✅ Document Date auto-update by SAP
 ✅ Remarks
 ✅ E:N entire block paste
 ✅ Restore clipboard

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.9
+
+- Corrected the SAP header sequence: paste Supplier, press Tab once to commit, wait for SAP, press Tab again, and paste Supplier Ref. into the focused field.
+- Posting Date is now the only date field entered; SAP is allowed to update Document Date automatically.
+- Reduced calibration from six click positions to four: Supplier, Posting Date, Remarks, and First Item No.
+- Existing beta 8 absolute coordinates for those four fields remain compatible.
+
 ## 0.1.0-beta.8
 
 - Switched calibration and runtime input to direct absolute desktop coordinates, removing SAP process, window-title, child-window, and focused-control detection from the paste path.

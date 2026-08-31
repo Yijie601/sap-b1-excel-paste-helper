@@ -306,17 +306,15 @@ static void RequiresCompleteCalibration()
 {
     var calibration = new SapCalibration();
     True(!calibration.IsComplete, "Default coordinates must not count as captured positions.");
-    Equal(6, calibration.MissingFields.Count);
+    Equal(4, calibration.MissingFields.Count);
 
     calibration.SupplierCaptured = true;
-    calibration.SupplierRefCaptured = true;
     calibration.PostingDateCaptured = true;
-    calibration.DocumentDateCaptured = true;
     calibration.RemarksCaptured = true;
     calibration.ItemNoCaptured = true;
     True(!calibration.IsComplete, "Legacy relative coordinates must not pass absolute desktop calibration.");
     calibration.CoordinateVersion = SapCalibration.AbsoluteDesktopCoordinateVersion;
-    True(calibration.IsComplete, "All six captured positions should complete calibration.");
+    True(calibration.IsComplete, "All four captured positions should complete calibration.");
     True(calibration.Clone().IsComplete, "Cloning lost the captured-state flags.");
 
     const string legacyJson = """
@@ -330,6 +328,29 @@ static void RequiresCompleteCalibration()
         new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
     True(legacyCalibration is not null && !legacyCalibration.IsComplete,
         "A legacy default-coordinate file must require fresh calibration.");
+
+    const string beta8Json = """
+        {
+          "coordinateVersion": 2,
+          "supplier": { "x": 160, "y": 40 },
+          "supplierRef": { "x": 160, "y": 76 },
+          "postingDate": { "x": 1720, "y": 75 },
+          "documentDate": { "x": 1720, "y": 110 },
+          "remarks": { "x": 240, "y": 770 },
+          "itemNo": { "x": 520, "y": 260 },
+          "supplierCaptured": true,
+          "supplierRefCaptured": true,
+          "postingDateCaptured": true,
+          "documentDateCaptured": true,
+          "remarksCaptured": true,
+          "itemNoCaptured": true
+        }
+        """;
+    var beta8Calibration = JsonSerializer.Deserialize<SapCalibration>(
+        beta8Json,
+        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    True(beta8Calibration is not null && beta8Calibration.IsComplete,
+        "Existing beta 8 absolute coordinates for the four required click targets should remain valid.");
 }
 
 static string Row(params string[] cells)

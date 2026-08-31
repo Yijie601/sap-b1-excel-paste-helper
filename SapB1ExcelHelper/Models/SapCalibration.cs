@@ -16,16 +16,12 @@ public sealed class SapCalibration
 
     public int CoordinateVersion { get; set; }
     public SapPoint Supplier { get; set; } = new();
-    public SapPoint SupplierRef { get; set; } = new();
     public SapPoint PostingDate { get; set; } = new();
-    public SapPoint DocumentDate { get; set; } = new();
     public SapPoint Remarks { get; set; } = new();
     public SapPoint ItemNo { get; set; } = new();
 
     public bool SupplierCaptured { get; set; }
-    public bool SupplierRefCaptured { get; set; }
     public bool PostingDateCaptured { get; set; }
-    public bool DocumentDateCaptured { get; set; }
     public bool RemarksCaptured { get; set; }
     public bool ItemNoCaptured { get; set; }
 
@@ -38,11 +34,9 @@ public sealed class SapCalibration
         get
         {
             var currentCoordinateVersion = CoordinateVersion == AbsoluteDesktopCoordinateVersion;
-            var fields = new List<string>(6);
+            var fields = new List<string>(4);
             AddIfMissing(fields, currentCoordinateVersion && SupplierCaptured, "Supplier");
-            AddIfMissing(fields, currentCoordinateVersion && SupplierRefCaptured, "Supplier Ref.");
             AddIfMissing(fields, currentCoordinateVersion && PostingDateCaptured, "Posting Date");
-            AddIfMissing(fields, currentCoordinateVersion && DocumentDateCaptured, "Document Date");
             AddIfMissing(fields, currentCoordinateVersion && RemarksCaptured, "Remarks");
             AddIfMissing(fields, currentCoordinateVersion && ItemNoCaptured, "First Item No.");
             return fields;
@@ -53,15 +47,11 @@ public sealed class SapCalibration
     {
         CoordinateVersion = CoordinateVersion,
         Supplier = Supplier.Clone(),
-        SupplierRef = SupplierRef.Clone(),
         PostingDate = PostingDate.Clone(),
-        DocumentDate = DocumentDate.Clone(),
         Remarks = Remarks.Clone(),
         ItemNo = ItemNo.Clone(),
         SupplierCaptured = SupplierCaptured,
-        SupplierRefCaptured = SupplierRefCaptured,
         PostingDateCaptured = PostingDateCaptured,
-        DocumentDateCaptured = DocumentDateCaptured,
         RemarksCaptured = RemarksCaptured,
         ItemNoCaptured = ItemNoCaptured
     };

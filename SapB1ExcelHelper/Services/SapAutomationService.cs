@@ -32,13 +32,18 @@ public sealed class SapAutomationService
 
             progress?.Invoke("Filling Supplier...");
             await PasteTextField(calibration.Supplier, invoice.SapSupplierValue);
+
+            progress?.Invoke("Committing Supplier and moving to Supplier Ref...");
             InputService.Tab();
             await Task.Delay(SupplierCommitDelay);
+            InputService.Tab();
+            await Task.Delay(FieldFocusDelay);
 
-            progress?.Invoke("Filling invoice header...");
-            await PasteTextField(calibration.SupplierRef, invoice.DocumentNumber);
+            progress?.Invoke("Filling Supplier Ref...");
+            await PasteTextAtCurrentFocus(invoice.DocumentNumber);
+
+            progress?.Invoke("Filling Posting Date and Remarks...");
             await PasteTextField(calibration.PostingDate, invoice.SapDate);
-            await PasteTextField(calibration.DocumentDate, invoice.SapDate);
             await PasteTextField(calibration.Remarks, invoice.DocumentNumber);
 
             progress?.Invoke($"Pasting {invoice.Items.Count} item row(s)...");
@@ -65,8 +70,13 @@ public sealed class SapAutomationService
 
     private static async Task PasteTextField(SapPoint point, string value)
     {
-        ClipboardService.SetText(value);
         await ClickAbsolutePoint(point);
+        await PasteTextAtCurrentFocus(value);
+    }
+
+    private static async Task PasteTextAtCurrentFocus(string value)
+    {
+        ClipboardService.SetText(value);
         InputService.SelectAll();
         await Task.Delay(20);
         InputService.Paste();
@@ -83,15 +93,13 @@ public sealed class SapAutomationService
     {
         if (!calibration.IsComplete)
         {
-            throw new SapAutomationException("Absolute desktop calibration is incomplete. Capture all six SAP positions again.");
+            throw new SapAutomationException("Absolute desktop calibration is incomplete. Capture all four SAP positions again.");
         }
 
         var points = new[]
         {
             calibration.Supplier,
-            calibration.SupplierRef,
             calibration.PostingDate,
-            calibration.DocumentDate,
             calibration.Remarks,
             calibration.ItemNo
         };

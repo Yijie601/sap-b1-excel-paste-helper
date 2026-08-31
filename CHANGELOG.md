@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-beta.10
+
+- Changed each Supplier navigation Tab into a human-like key press with separate key-down, 110 ms hold, key-up, and 220 ms release delays so SAP Business One cannot miss an instantaneous key tap.
+- Added a 500 ms settling delay after pasting Supplier before sending the first Tab.
+- The main status now explicitly shows `Pressing Tab 1 of 2` and `Pressing Tab 2 of 2` while the sequence runs.
+
 ## 0.1.0-beta.9
 
 - Corrected the SAP header sequence: paste Supplier, press Tab once to commit, wait for SAP, press Tab again, and paste Supplier Ref. into the focused field.

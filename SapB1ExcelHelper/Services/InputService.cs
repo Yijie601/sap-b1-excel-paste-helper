@@ -9,6 +9,8 @@ internal static class InputService
     private const uint KeyUp = 0x0002;
     private const ushort VkControl = 0x11;
     private const ushort VkTab = 0x09;
+    private static readonly TimeSpan TabKeyHoldDelay = TimeSpan.FromMilliseconds(110);
+    private static readonly TimeSpan TabKeyReleaseDelay = TimeSpan.FromMilliseconds(220);
 
     internal static void Click(int x, int y)
     {
@@ -28,11 +30,13 @@ internal static class InputService
 
     internal static void Paste() => SendShortcut(0x56);
 
-    internal static void Tab() => NativeMethods.EnsureInputSent(new[]
+    internal static async Task PressTabAsync()
     {
-        Key(VkTab, false),
-        Key(VkTab, true)
-    });
+        NativeMethods.EnsureInputSent(new[] { Key(VkTab, false) });
+        await Task.Delay(TabKeyHoldDelay);
+        NativeMethods.EnsureInputSent(new[] { Key(VkTab, true) });
+        await Task.Delay(TabKeyReleaseDelay);
+    }
 
     private static void SendShortcut(ushort key)
     {

@@ -320,6 +320,7 @@ TAB
 ```
 
 第二次 TAB 后焦点会停在 Supplier Ref.，不需要点击 Supplier Ref. 坐标。
+两个 TAB 都必须使用分开的 key-down / 短暂停留 / key-up，避免 SAP 忽略同一瞬间完成的按键。
 
 SAP 之后会加载：
 

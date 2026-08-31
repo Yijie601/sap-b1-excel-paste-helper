@@ -16,6 +16,7 @@ public sealed class SapAutomationService
 {
     private static readonly TimeSpan FieldFocusDelay = TimeSpan.FromMilliseconds(90);
     private static readonly TimeSpan FieldPasteDelay = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan SupplierPasteSettleDelay = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SupplierCommitDelay = TimeSpan.FromMilliseconds(1800);
 
     public async Task<AutomationResult> RunAsync(
@@ -32,12 +33,14 @@ public sealed class SapAutomationService
 
             progress?.Invoke("Filling Supplier...");
             await PasteTextField(calibration.Supplier, invoice.SapSupplierValue);
+            await Task.Delay(SupplierPasteSettleDelay);
 
-            progress?.Invoke("Committing Supplier and moving to Supplier Ref...");
-            InputService.Tab();
+            progress?.Invoke("Pressing Tab 1 of 2 — committing Supplier...");
+            await InputService.PressTabAsync();
             await Task.Delay(SupplierCommitDelay);
-            InputService.Tab();
-            await Task.Delay(FieldFocusDelay);
+
+            progress?.Invoke("Pressing Tab 2 of 2 — opening Supplier Ref...");
+            await InputService.PressTabAsync();
 
             progress?.Invoke("Filling Supplier Ref...");
             await PasteTextAtCurrentFocus(invoice.DocumentNumber);

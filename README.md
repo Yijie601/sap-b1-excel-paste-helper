@@ -79,7 +79,7 @@ Requirements:
 ```powershell
 dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
 dotnet publish .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish
-& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.9 .\installer\SapB1ExcelHelper.nsi
+& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.10 .\installer\SapB1ExcelHelper.nsi
 ```
 
 ## Publishing a new version

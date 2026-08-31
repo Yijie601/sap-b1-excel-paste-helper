@@ -7,7 +7,6 @@ internal static class InputService
     private const uint MouseLeftDown = 0x0002;
     private const uint MouseLeftUp = 0x0004;
     private const uint KeyUp = 0x0002;
-    private const uint KeyUnicode = 0x0004;
     private const ushort VkControl = 0x11;
     private const ushort VkTab = 0x09;
 
@@ -34,23 +33,6 @@ internal static class InputService
         Key(VkTab, false),
         Key(VkTab, true)
     });
-
-    internal static void SendUnicodeText(string value)
-    {
-        if (value.Length == 0)
-        {
-            return;
-        }
-
-        var inputs = new List<NativeMethods.Input>(value.Length * 2);
-        foreach (var character in value)
-        {
-            inputs.Add(UnicodeKey(character, false));
-            inputs.Add(UnicodeKey(character, true));
-        }
-
-        NativeMethods.EnsureInputSent(inputs.ToArray());
-    }
 
     private static void SendShortcut(ushort key)
     {
@@ -84,18 +66,4 @@ internal static class InputService
             }
         }
     };
-
-    private static NativeMethods.Input UnicodeKey(char character, bool keyUp) => new()
-    {
-        Type = InputKeyboard,
-        Data = new NativeMethods.InputUnion
-        {
-            Keyboard = new NativeMethods.KeyboardInput
-            {
-                ScanCode = character,
-                Flags = KeyUnicode | (keyUp ? KeyUp : 0)
-            }
-        }
-    };
 }
-

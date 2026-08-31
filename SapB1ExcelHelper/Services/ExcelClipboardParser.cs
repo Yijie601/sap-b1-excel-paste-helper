@@ -62,10 +62,14 @@ public sealed class ExcelClipboardParser
 
         foreach (var row in rows.Skip(1))
         {
-            var rowDate = ParseDate(row[1]);
-            if (!string.Equals(row[0].Trim(), supplier, StringComparison.OrdinalIgnoreCase) ||
-                rowDate != documentDate ||
-                !string.Equals(row[2].Trim(), documentNumber, StringComparison.Ordinal))
+            var rowSupplier = row[0].Trim();
+            var rowDateText = row[1].Trim();
+            var rowDocumentNumber = row[2].Trim();
+            if ((rowSupplier.Length > 0 &&
+                 !string.Equals(rowSupplier, supplier, StringComparison.OrdinalIgnoreCase)) ||
+                (rowDateText.Length > 0 && ParseDate(rowDateText) != documentDate) ||
+                (rowDocumentNumber.Length > 0 &&
+                 !string.Equals(rowDocumentNumber, documentNumber, StringComparison.Ordinal)))
             {
                 throw new ClipboardValidationException("Multiple invoices detected.");
             }
@@ -84,6 +88,11 @@ public sealed class ExcelClipboardParser
             Uom = row[11].Trim(),
             Warehouse = row[12].Trim()
         }).ToArray();
+
+        if (items.Any(item => item.ItemNo.Length == 0))
+        {
+            throw new ClipboardValidationException("SAP Code / Item No. is required on every selected row.");
+        }
 
         return new InvoiceClipboardData
         {
@@ -124,4 +133,3 @@ public sealed class ExcelClipboardParser
                 row[2].Contains("Number", StringComparison.OrdinalIgnoreCase));
     }
 }
-

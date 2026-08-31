@@ -6,18 +6,19 @@ namespace SapB1ExcelHelper;
 public sealed class CalibrationForm : Form
 {
     private readonly CalibrationService _calibrationService;
-    private readonly SapWindowService _windowService;
     private readonly MouseCaptureService _mouseCaptureService = new();
     private readonly Dictionary<string, Label> _coordinateLabels = new(StringComparer.Ordinal);
     private readonly Label _statusLabel;
     private SapCalibration _calibration;
     private bool _capturing;
 
-    public CalibrationForm(CalibrationService calibrationService, SapWindowService windowService)
+    public CalibrationForm(CalibrationService calibrationService)
     {
         _calibrationService = calibrationService;
-        _windowService = windowService;
-        _calibration = calibrationService.Load().Clone();
+        var savedCalibration = calibrationService.Load().Clone();
+        _calibration = savedCalibration.CoordinateVersion == SapCalibration.AbsoluteDesktopCoordinateVersion
+            ? savedCalibration
+            : new SapCalibration();
 
         Text = "SAP Calibration";
         StartPosition = FormStartPosition.CenterParent;
@@ -35,7 +36,7 @@ public sealed class CalibrationForm : Form
         };
         var instructions = new Label
         {
-            Text = "For each field, click Capture and then click the real input position in SAP.\nCoordinates are saved relative to the AP Invoice window.",
+            Text = "For each field, click Capture and then click the real input position in SAP.\nSAP must stay at the same desktop position after calibration.",
             ForeColor = Color.FromArgb(85, 91, 101),
             AutoSize = true,
             Location = new Point(25, 58)
@@ -57,7 +58,7 @@ public sealed class CalibrationForm : Form
         {
             table.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         }
-        AddHeader(table, "SAP field", "Relative X / Y", "Action");
+        AddHeader(table, "SAP field", "Desktop X / Y", "Action");
         AddCalibrationRow(table, 1, "Supplier", point =>
         {
             _calibration.Supplier = point;
@@ -203,27 +204,17 @@ public sealed class CalibrationForm : Form
                 return;
             }
 
-            if (!_windowService.TryGetApInvoiceAtPoint(click.Value, out var window, out var error))
+            if (!SystemInformation.VirtualScreen.Contains(click.Value))
             {
-                _statusLabel.Text = error;
-                MessageBox.Show(error, "Calibration", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                _statusLabel.Text = "The click was outside the current Windows desktop.";
                 return;
             }
 
-            var relative = new SapPoint
-            {
-                X = click.Value.X - window!.Left,
-                Y = click.Value.Y - window.Top
-            };
-            if (relative.X < 0 || relative.Y < 0 || relative.X >= window.Width || relative.Y >= window.Height)
-            {
-                _statusLabel.Text = "The click was outside the AP Invoice window.";
-                return;
-            }
-
-            setPoint(relative);
+            _calibration.CoordinateVersion = SapCalibration.AbsoluteDesktopCoordinateVersion;
+            var absolutePoint = new SapPoint { X = click.Value.X, Y = click.Value.Y };
+            setPoint(absolutePoint);
             RefreshCoordinateLabels();
-            _statusLabel.Text = $"Captured {fieldName}: X={relative.X}, Y={relative.Y}.";
+            _statusLabel.Text = $"Captured {fieldName}: desktop X={absolutePoint.X}, Y={absolutePoint.Y}.";
         }
         finally
         {
@@ -237,16 +228,6 @@ public sealed class CalibrationForm : Form
     {
         if (!EnsureComplete("testing"))
         {
-            return;
-        }
-
-        if (!_windowService.TryFindOpenApInvoice(out var window))
-        {
-            MessageBox.Show(
-                "Open SAP Business One AP Invoice before testing calibration.",
-                "Calibration",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
             return;
         }
 
@@ -267,7 +248,7 @@ public sealed class CalibrationForm : Form
         {
             foreach (var (_, point) in points)
             {
-                _ = NativeMethods.SetCursorPos(window!.Left + point.X, window.Top + point.Y);
+                _ = NativeMethods.SetCursorPos(point.X, point.Y);
                 await Task.Delay(650);
             }
         }
@@ -346,7 +327,9 @@ internal sealed class CaptureInstructionForm : Form
         StartPosition = FormStartPosition.Manual;
 
         var workingArea = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
-        Location = new Point(workingArea.Right - Width - 22, workingArea.Top + 22);
+        Location = new Point(
+            workingArea.Left + (workingArea.Width - Width) / 2,
+            workingArea.Top + 18);
         Controls.Add(new Label
         {
             Text = instruction,

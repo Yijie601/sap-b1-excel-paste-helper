@@ -6,16 +6,17 @@ var tests = new (string Name, Action Run)[]
 {
     ("Parses valid multi-row invoice and preserves blank columns", ParsesValidInvoice),
     ("Starts the COL33 item paste at SAP Code instead of Supplier Name", BuildsExpectedCol33ItemBlock),
+    ("Uses the first B:D header once and builds fifty E:N item rows", BuildsFiftyRowInvoice),
     ("Supports every documented date format", SupportsDateFormats),
     ("Rejects multiple invoices", RejectsMultipleInvoices),
     ("Rejects Excel headers", RejectsHeader),
     ("Rejects an incorrect column count", RejectsWrongColumnCount),
+    ("Rejects a selected row without an SAP item code", RejectsMissingItemCode),
     ("Uses the Excel supplier name directly", UsesSupplierNameDirectly),
     ("Compares stable and prerelease semantic versions", ComparesSemanticVersions),
     ("Selects the newest compatible GitHub release asset", SelectsNewestUpdate),
     ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest),
     ("Validates and persists custom global hotkeys", HandlesCustomHotkeys),
-    ("Recognizes SAP AP and A/P Invoice titles", RecognizesApInvoiceTitles),
     ("Requires every SAP position to be captured explicitly", RequiresCompleteCalibration)
 };
 
@@ -104,6 +105,41 @@ static void BuildsExpectedCol33ItemBlock()
         invoice.ItemClipboardBlock);
 }
 
+static void BuildsFiftyRowInvoice()
+{
+    var parser = new ExcelClipboardParser();
+    var rows = Enumerable.Range(1, 50)
+        .Select(index => Row(
+            index == 1 ? "COL33 PTE.LTD" : "",
+            index == 1 ? "03-08-2026" : "",
+            index == 1 ? "COL26080630_F" : "",
+            $"ITEM-{index:00}",
+            "O-HW",
+            index.ToString(),
+            "",
+            "7.5",
+            "TX7",
+            "",
+            "",
+            "",
+            "S-HW"));
+
+    var invoice = parser.Parse(string.Join("\r\n", rows));
+    Equal("COL33 PTE.LTD", invoice.SupplierName);
+    Equal("COL26080630_F", invoice.DocumentNumber);
+    Equal("03.08.26", invoice.SapDate);
+    Equal(50, invoice.Items.Count);
+
+    var itemRows = invoice.ItemClipboardBlock.Split("\r\n", StringSplitOptions.None);
+    Equal(50, itemRows.Length);
+    True(itemRows[0].StartsWith("ITEM-01\tO-HW\t1\t", StringComparison.Ordinal),
+        "The first item row did not start at Excel column E.");
+    True(itemRows[49].StartsWith("ITEM-50\tO-HW\t50\t", StringComparison.Ordinal),
+        "The fiftieth item row was not preserved.");
+    True(!invoice.ItemClipboardBlock.Contains(invoice.SupplierName, StringComparison.Ordinal),
+        "Supplier Name leaked into the E:N item block.");
+}
+
 static void RejectsMultipleInvoices()
 {
     var parser = new ExcelClipboardParser();
@@ -125,6 +161,14 @@ static void RejectsWrongColumnCount()
     Throws<ClipboardValidationException>(
         () => parser.Parse(string.Join('\t', Enumerable.Repeat("x", 12))),
         "13 columns");
+}
+
+static void RejectsMissingItemCode()
+{
+    var parser = new ExcelClipboardParser();
+    Throws<ClipboardValidationException>(
+        () => parser.Parse(Row("Supplier", "13-08-2026", "REF", "", "O", "1", "1", "1", "V", "", "0", "", "W")),
+        "SAP Code / Item No. is required");
 }
 
 static void UsesSupplierNameDirectly()
@@ -258,13 +302,6 @@ static void HandlesCustomHotkeys()
     }
 }
 
-static void RecognizesApInvoiceTitles()
-{
-    True(SapWindowService.IsApInvoiceTitle("A/P Invoice"), "Standard SAP A/P title was not recognized.");
-    True(SapWindowService.IsApInvoiceTitle("AP Invoice - Vendor"), "AP title without slash was not recognized.");
-    True(!SapWindowService.IsApInvoiceTitle("Sales Order"), "An unrelated SAP window was accepted.");
-}
-
 static void RequiresCompleteCalibration()
 {
     var calibration = new SapCalibration();
@@ -277,6 +314,8 @@ static void RequiresCompleteCalibration()
     calibration.DocumentDateCaptured = true;
     calibration.RemarksCaptured = true;
     calibration.ItemNoCaptured = true;
+    True(!calibration.IsComplete, "Legacy relative coordinates must not pass absolute desktop calibration.");
+    calibration.CoordinateVersion = SapCalibration.AbsoluteDesktopCoordinateVersion;
     True(calibration.IsComplete, "All six captured positions should complete calibration.");
     True(calibration.Clone().IsComplete, "Cloning lost the captured-state flags.");
 

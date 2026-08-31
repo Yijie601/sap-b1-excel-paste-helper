@@ -12,12 +12,15 @@ public sealed class SapPoint
 
 public sealed class SapCalibration
 {
-    public SapPoint Supplier { get; set; } = new() { X = 249, Y = 62 };
-    public SapPoint SupplierRef { get; set; } = new() { X = 249, Y = 97 };
-    public SapPoint PostingDate { get; set; } = new() { X = 1799, Y = 80 };
-    public SapPoint DocumentDate { get; set; } = new() { X = 1799, Y = 115 };
-    public SapPoint Remarks { get; set; } = new() { X = 249, Y = 817 };
-    public SapPoint ItemNo { get; set; } = new() { X = 536, Y = 283 };
+    public const int AbsoluteDesktopCoordinateVersion = 2;
+
+    public int CoordinateVersion { get; set; }
+    public SapPoint Supplier { get; set; } = new();
+    public SapPoint SupplierRef { get; set; } = new();
+    public SapPoint PostingDate { get; set; } = new();
+    public SapPoint DocumentDate { get; set; } = new();
+    public SapPoint Remarks { get; set; } = new();
+    public SapPoint ItemNo { get; set; } = new();
 
     public bool SupplierCaptured { get; set; }
     public bool SupplierRefCaptured { get; set; }
@@ -34,19 +37,21 @@ public sealed class SapCalibration
     {
         get
         {
+            var currentCoordinateVersion = CoordinateVersion == AbsoluteDesktopCoordinateVersion;
             var fields = new List<string>(6);
-            AddIfMissing(fields, SupplierCaptured, "Supplier");
-            AddIfMissing(fields, SupplierRefCaptured, "Supplier Ref.");
-            AddIfMissing(fields, PostingDateCaptured, "Posting Date");
-            AddIfMissing(fields, DocumentDateCaptured, "Document Date");
-            AddIfMissing(fields, RemarksCaptured, "Remarks");
-            AddIfMissing(fields, ItemNoCaptured, "First Item No.");
+            AddIfMissing(fields, currentCoordinateVersion && SupplierCaptured, "Supplier");
+            AddIfMissing(fields, currentCoordinateVersion && SupplierRefCaptured, "Supplier Ref.");
+            AddIfMissing(fields, currentCoordinateVersion && PostingDateCaptured, "Posting Date");
+            AddIfMissing(fields, currentCoordinateVersion && DocumentDateCaptured, "Document Date");
+            AddIfMissing(fields, currentCoordinateVersion && RemarksCaptured, "Remarks");
+            AddIfMissing(fields, currentCoordinateVersion && ItemNoCaptured, "First Item No.");
             return fields;
         }
     }
 
     public SapCalibration Clone() => new()
     {
+        CoordinateVersion = CoordinateVersion,
         Supplier = Supplier.Clone(),
         SupplierRef = SupplierRef.Clone(),
         PostingDate = PostingDate.Clone(),

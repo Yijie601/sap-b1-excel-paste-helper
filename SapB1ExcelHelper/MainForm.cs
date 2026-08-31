@@ -11,16 +11,14 @@ public sealed class MainForm : Form
     private readonly ExcelClipboardParser _parser = new();
     private readonly CalibrationService _calibrationService = new();
     private readonly HotkeySettingsService _hotkeySettingsService = new();
-    private readonly SapWindowService _windowService = new();
     private readonly UpdateService _updateService = new();
     private readonly UpdateStateService _updateStateService = new();
     private readonly SapAutomationService _automationService;
     private readonly NotifyIcon _trayIcon;
-    private readonly System.Windows.Forms.Timer _sapStatusTimer;
     private readonly Label _subtitleLabel;
     private readonly Label _statusLabel;
     private readonly Label _invoiceLabel;
-    private readonly Label _sapLabel;
+    private readonly Label _modeLabel;
     private readonly LinkLabel _hotkeyLabel;
     private readonly Button _runButton;
     private readonly Button _updateButton;
@@ -39,7 +37,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        _automationService = new SapAutomationService(_windowService);
+        _automationService = new SapAutomationService();
         _hotkey = _hotkeySettingsService.Load();
 
         Text = "SAP B1 Excel Helper";
@@ -92,10 +90,11 @@ public sealed class MainForm : Form
             Size = new Size(515, 25),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
-        _sapLabel = new Label
+        _modeLabel = new Label
         {
-            Text = "SAP: Not active",
+            Text = "Mode: Absolute desktop coordinates",
             AutoSize = true,
+            ForeColor = Color.FromArgb(85, 91, 101),
             Location = new Point(22, 92)
         };
         _hotkeyLabel = new LinkLabel
@@ -109,7 +108,7 @@ public sealed class MainForm : Form
         _hotkeyLabel.LinkClicked += (_, _) => OpenHotkeySettings();
         statusPanel.Controls.AddRange(new Control[]
         {
-            _statusLabel, _invoiceLabel, _sapLabel, _hotkeyLabel
+            _statusLabel, _invoiceLabel, _modeLabel, _hotkeyLabel
         });
 
         _runButton = CreateButton(string.Empty, 30, 278, 170);
@@ -160,10 +159,6 @@ public sealed class MainForm : Form
         };
         _trayIcon.DoubleClick += (_, _) => RestoreFromTray();
         RefreshHotkeyText();
-
-        _sapStatusTimer = new System.Windows.Forms.Timer { Interval = 1000 };
-        _sapStatusTimer.Tick += (_, _) => UpdateSapStatus();
-        _sapStatusTimer.Start();
 
         Resize += (_, _) =>
         {
@@ -273,6 +268,14 @@ public sealed class MainForm : Form
             return;
         }
 
+        if (_calibrationForm is { IsDisposed: false })
+        {
+            _calibrationForm.Show();
+            _calibrationForm.Activate();
+            ShowError("Finish and save Calibration before running the SAP paste.");
+            return;
+        }
+
         var currentText = ClipboardService.TryGetText();
         if (_preparedInvoice is null ||
             currentText is null ||
@@ -296,12 +299,6 @@ public sealed class MainForm : Form
             return;
         }
 
-        if (!_windowService.TryGetActiveApInvoice(out var sapWindow, out var windowError))
-        {
-            ShowError(windowError);
-            return;
-        }
-
         var invoice = _preparedInvoice;
         _automationRunning = true;
         _runButton.Enabled = false;
@@ -311,9 +308,14 @@ public sealed class MainForm : Form
 
         try
         {
+            if (ContainsFocus)
+            {
+                MinimizeToTray();
+                await Task.Delay(250);
+            }
+
             var result = await _automationService.RunAsync(
                 invoice,
-                sapWindow!,
                 calibration,
                 message => SetWorking(message));
 
@@ -496,15 +498,6 @@ public sealed class MainForm : Form
         _invoiceLabel.Text = message;
     }
 
-    private void UpdateSapStatus()
-    {
-        var sapIsActive = _windowService.IsSapForeground();
-        _sapLabel.Text = sapIsActive ? "SAP: Active" : "SAP: Not active";
-        _sapLabel.ForeColor = sapIsActive
-            ? Color.FromArgb(22, 125, 72)
-            : Color.FromArgb(85, 91, 101);
-    }
-
     private void ShowSuccess(InvoiceClipboardData invoice, AutomationResult result)
     {
         _trayIcon.BalloonTipTitle = $"✓ {invoice.DocumentNumber}";
@@ -528,7 +521,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        var form = new CalibrationForm(_calibrationService, _windowService);
+        var form = new CalibrationForm(_calibrationService);
         _calibrationForm = form;
         form.FormClosed += (_, _) =>
         {
@@ -664,7 +657,6 @@ public sealed class MainForm : Form
             return;
         }
 
-        _sapStatusTimer.Stop();
         if (_calibrationForm is { IsDisposed: false })
         {
             _calibrationForm.Close();

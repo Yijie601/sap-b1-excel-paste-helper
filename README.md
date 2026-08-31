@@ -29,11 +29,11 @@ Open **Calibration**. For each field:
 4. Use **Test Calibration** to watch the mouse move through the saved positions without clicking or entering data.
 5. Click **Save**.
 
-Coordinates are stored relative to the AP Invoice window, so moving the SAP window does not invalidate calibration. A resolution or SAP layout change may require recalibration.
+Coordinates are stored as direct Windows desktop positions. Keep SAP maximized or in the same screen position used during calibration. Recalibrate after moving SAP, changing display scaling, resolution, monitor arrangement, or the SAP layout.
 
-All six positions must show a green check before **Test Calibration**, **Save**, or the global hotkey can run. Versions before beta 7 stored unverified built-in coordinates; after updating, capture all six positions once so the helper cannot enter Supplier data into an incorrect field.
+All six positions must show a green check before **Test Calibration**, **Save**, or the global hotkey can run. Beta 8 uses a new absolute-coordinate format, so capture all six positions once after updating. Older relative coordinates are intentionally rejected.
 
-During capture, the helper identifies the SAP A/P Invoice from the window directly underneath your click; it does not depend on Windows completing a foreground-focus change first. Both `AP Invoice` and `A/P Invoice` window titles are supported.
+During capture, the helper records the exact desktop point you click. During F8 execution it moves to those points directly; it does not depend on the SAP process name, A/P Invoice title, internal window class, or input-control detection.
 
 ## Clipboard validation
 
@@ -41,10 +41,11 @@ The helper expects 13 tab-separated columns corresponding to Excel B:N. It valid
 
 - exactly 13 columns on every row;
 - data rows only, without the Excel header;
-- one Supplier Name, Document Date, and Document Number across all rows;
+- Supplier Name, Document Date, and Document Number from the first row only; later B:D cells may repeat the same values or remain blank;
+- a nonblank SAP Code / Item No. in column E for every selected row;
 - dates in `dd-MM-yyyy`, `dd/MM/yyyy`, `dd.MM.yyyy`, or `yyyy-MM-dd` format.
 
-The Excel Supplier Name is pasted directly into SAP. SAP dates are prepared as `dd.MM.yy`. Empty Department and UoM cells remain in their original column positions. The E:N item matrix is pasted as one multi-row operation.
+The Excel Supplier Name is pasted once into Supplier. The first-row Document Number is pasted once into Supplier Ref. and once into Remarks; the first-row date is pasted once into each SAP date field as `dd.MM.yy`. Empty item cells remain in their original positions. Whether there are 2 rows or dozens, all E:N rows are pasted once as one multi-row matrix beginning with column E SAP Code.
 
 ## Data locations
 
@@ -78,7 +79,7 @@ Requirements:
 ```powershell
 dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
 dotnet publish .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish
-& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.7 .\installer\SapB1ExcelHelper.nsi
+& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.8 .\installer\SapB1ExcelHelper.nsi
 ```
 
 ## Publishing a new version
@@ -97,4 +98,4 @@ GitHub Actions builds the self-contained executable, Windows installer, portable
 - Windows x64 and SAP Business One only.
 - The exact Excel Supplier Name must be accepted by the target SAP Supplier field.
 - The first public build should be treated as a beta until calibrated and verified against the target company's SAP installation.
-- SAP UI layouts that move individual fields require recalibration.
+- SAP must remain in the same desktop position used for calibration; moved fields or display-layout changes require recalibration.

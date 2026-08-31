@@ -14,16 +14,12 @@ public sealed record AutomationResult(TimeSpan Duration, int ItemRows);
 
 public sealed class SapAutomationService
 {
-    private readonly SapWindowService _windowService;
-
-    public SapAutomationService(SapWindowService windowService)
-    {
-        _windowService = windowService;
-    }
+    private static readonly TimeSpan FieldFocusDelay = TimeSpan.FromMilliseconds(90);
+    private static readonly TimeSpan FieldPasteDelay = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan SupplierCommitDelay = TimeSpan.FromMilliseconds(1800);
 
     public async Task<AutomationResult> RunAsync(
         InvoiceClipboardData invoice,
-        SapWindowInfo window,
         SapCalibration calibration,
         Action<string>? progress = null)
     {
@@ -32,23 +28,24 @@ public sealed class SapAutomationService
 
         try
         {
+            ValidateAbsoluteDesktopCoordinates(calibration);
+
             progress?.Invoke("Filling Supplier...");
-            await FillTextField(window, calibration.Supplier, invoice.SapSupplierValue);
+            await PasteTextField(calibration.Supplier, invoice.SapSupplierValue);
             InputService.Tab();
-            await WaitUntilReady(window, TimeSpan.FromMilliseconds(220), TimeSpan.FromSeconds(2.5));
+            await Task.Delay(SupplierCommitDelay);
 
             progress?.Invoke("Filling invoice header...");
-            await FillTextField(window, calibration.SupplierRef, invoice.DocumentNumber);
-            await FillTextField(window, calibration.PostingDate, invoice.SapDate);
-            await FillTextField(window, calibration.DocumentDate, invoice.SapDate);
-            await FillTextField(window, calibration.Remarks, invoice.DocumentNumber);
+            await PasteTextField(calibration.SupplierRef, invoice.DocumentNumber);
+            await PasteTextField(calibration.PostingDate, invoice.SapDate);
+            await PasteTextField(calibration.DocumentDate, invoice.SapDate);
+            await PasteTextField(calibration.Remarks, invoice.DocumentNumber);
 
             progress?.Invoke($"Pasting {invoice.Items.Count} item row(s)...");
-            EnsureSapStillActive(window);
             ClipboardService.SetText(invoice.ItemClipboardBlock);
-            await ClickAndVerifyEditor(window, calibration.ItemNo);
+            await ClickAbsolutePoint(calibration.ItemNo);
             InputService.Paste();
-            await WaitUntilReady(window, TimeSpan.FromMilliseconds(180), TimeSpan.FromSeconds(3));
+            await Task.Delay(ItemPasteDelay(invoice.Items.Count));
 
             stopwatch.Stop();
             return new AutomationResult(stopwatch.Elapsed, invoice.Items.Count);
@@ -66,72 +63,46 @@ public sealed class SapAutomationService
         }
     }
 
-    private async Task FillTextField(SapWindowInfo window, SapPoint point, string value)
+    private static async Task PasteTextField(SapPoint point, string value)
     {
-        await ClickAndVerifyEditor(window, point);
+        ClipboardService.SetText(value);
+        await ClickAbsolutePoint(point);
         InputService.SelectAll();
-        await Task.Delay(12);
-        InputService.SendUnicodeText(value);
-        await Task.Delay(18);
+        await Task.Delay(20);
+        InputService.Paste();
+        await Task.Delay(FieldPasteDelay);
     }
 
-    private async Task ClickAndVerifyEditor(SapWindowInfo window, SapPoint point)
+    private static async Task ClickAbsolutePoint(SapPoint point)
     {
-        EnsureSapStillActive(window);
-        if (point.X < 0 || point.Y < 0 || point.X >= window.Width || point.Y >= window.Height)
-        {
-            throw new SapAutomationException("A calibrated field is outside the AP Invoice window. Run Calibration again.");
-        }
-
-        InputService.Click(window.Left + point.X, window.Top + point.Y);
-        for (var attempt = 0; attempt < 5; attempt++)
-        {
-            await Task.Delay(15);
-            EnsureSapStillActive(window);
-            if (_windowService.GetFocusedControlClass(window)
-                .Equals("TMEditTextClass", StringComparison.Ordinal))
-            {
-                return;
-            }
-        }
-
-        throw new SapAutomationException(
-            "The calibrated position did not activate an SAP input field. Run Test Calibration and recalibrate this field.");
+        InputService.Click(point.X, point.Y);
+        await Task.Delay(FieldFocusDelay);
     }
 
-    private async Task WaitUntilReady(SapWindowInfo window, TimeSpan minimumDelay, TimeSpan timeout)
+    private static void ValidateAbsoluteDesktopCoordinates(SapCalibration calibration)
     {
-        await Task.Delay(minimumDelay);
-        var stopwatch = Stopwatch.StartNew();
-        var stableChecks = 0;
-
-        while (stopwatch.Elapsed < timeout)
+        if (!calibration.IsComplete)
         {
-            EnsureSapStillActive(window);
-            if (_windowService.IsResponsive(window) && !_windowService.IsWaitCursorVisible())
-            {
-                stableChecks++;
-                if (stableChecks >= 3)
-                {
-                    return;
-                }
-            }
-            else
-            {
-                stableChecks = 0;
-            }
-
-            await Task.Delay(40);
+            throw new SapAutomationException("Absolute desktop calibration is incomplete. Capture all six SAP positions again.");
         }
 
-        throw new SapAutomationException("SAP did not become ready before the timeout. No Add or Update action was performed.");
-    }
-
-    private void EnsureSapStillActive(SapWindowInfo window)
-    {
-        if (!_windowService.IsSameActiveInvoice(window))
+        var points = new[]
         {
-            throw new SapAutomationException("SAP AP Invoice lost focus. Automation stopped safely.");
+            calibration.Supplier,
+            calibration.SupplierRef,
+            calibration.PostingDate,
+            calibration.DocumentDate,
+            calibration.Remarks,
+            calibration.ItemNo
+        };
+        var desktop = SystemInformation.VirtualScreen;
+        if (points.Any(point => !desktop.Contains(point.X, point.Y)))
+        {
+            throw new SapAutomationException(
+                "A calibrated point is outside the current desktop. Keep the same monitor layout or run Calibration again.");
         }
     }
+
+    private static TimeSpan ItemPasteDelay(int rowCount) =>
+        TimeSpan.FromMilliseconds(Math.Min(5000, 450 + rowCount * 35));
 }

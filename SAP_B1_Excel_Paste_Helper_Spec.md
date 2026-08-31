@@ -480,74 +480,36 @@ First Item No.
 - 不需要 OCR
 - 不需要截图识别字段
 
-## 12. AP Invoice Window
+## 12. Desktop Coordinate Mode
 
-已观察到 SAP AP Invoice internal window：
+根据公司电脑的实际兼容性测试，正式 runtime 使用用户捕获的绝对 Windows desktop coordinates。
+
+正常 F8 不依赖：
 
 ```text
-Name:
-AP Invoice
-
-Class:
+SAP process name
+A/P Invoice window title
 TMMDIChildClass
+TMEditTextClass
+AP Invoice window rectangle
 ```
 
-测试 window rect 约：
+要求用户让 SAP 保持最大化，或保持与 Calibration 相同的桌面位置。移动 SAP、改变缩放、分辨率或显示器排列后需要重新 Calibration。
 
-```text
-Left:   5
-Top:    85
-Width:  1910
-Height: 901
-```
+## 13. Absolute Desktop Coordinates
 
-正式软件不能使用绝对 screen coordinates。
-
-必须：
-
-```text
-AP Invoice Window Top-Left
-+
-Relative Coordinate
-```
-
-## 13. 当前已校准 Relative Coordinates
-
-相对于：
-
-```text
-AP Invoice top-left = (0,0)
-```
-
-当前：
+每一台电脑都必须实际捕获：
 
 ```text
 Supplier
-X = 249
-Y = 62
-
 Supplier Ref. No.
-X = 249
-Y = 97
-
 Posting Date
-X = 1799
-Y = 80
-
 Document Date
-X = 1799
-Y = 115
-
 Remarks
-X = 249
-Y = 817
-
 First Item No.
-X = 536
-Y = 283
 ```
 
-第一版可以使用这些 default values。
+不能使用内置 default values。配置必须带 absolute-coordinate format version；旧 relative coordinates 一律视为未校准。
 
 ## 14. Calibration / 自定义位置
 
@@ -593,14 +555,10 @@ Click the Supplier field in SAP.
 
 用户点击 SAP 对应位置。
 
-程序读取：
+程序直接保存：
 
 ```text
-Mouse Screen X/Y
--
-AP Invoice Window Left/Top
-=
-Relative X/Y
+Mouse Desktop X/Y
 ```
 
 例如：
@@ -615,6 +573,7 @@ Y = 62
 
 ```json
 {
+  "coordinateVersion": 2,
   "supplier": { "x": 249, "y": 62 },
   "supplierRef": { "x": 249, "y": 97 },
   "postingDate": { "x": 1799, "y": 80 },
@@ -645,10 +604,7 @@ Calibration 是：
 ```text
 读取 calibration.json
 ↓
-取得 AP Invoice 左上角
-↓
-windowLeft + relativeX
-windowTop  + relativeY
+读取 absolute desktop X/Y
 ↓
 直接 Click / SendInput
 ```
@@ -755,20 +711,11 @@ Alt+Tab / Click SAP
 F8
 ```
 
-F8 后先确认：
+F8 后不会侦测 SAP process、窗口标题或内部控件。Helper 会按校准保存的
+Windows desktop absolute coordinates 直接点击与粘贴，因此用户必须先把 SAP
+A/P Invoice 放在校准时相同的屏幕、位置与大小，再按 F8。
 
-```text
-Foreground process == SAP Business One
-```
-
-如果不是：
-
-```text
-SAP Business One is not active.
-Switch to AP Invoice and press F8 again.
-```
-
-然后停止。
+如果 SAP 不在预期位置，用户应停止操作并重新校准；Helper 不会猜测或切换窗口。
 
 不要自己：
 
@@ -781,34 +728,33 @@ Search Excel then switch SAP
 ## 19. F8 执行顺序
 
 ```text
-1. Confirm SAP is foreground
-2. Read Clipboard
-3. Validate B:N structure
-4. Detect header row
-5. Validate same Invoice
-6. Resolve Supplier Mapping
-7. Convert Date
-8. Locate AP Invoice internal window
-9. Load calibration.json
-10. Fill Supplier
-11. Commit Supplier
-12. Wait until SAP Supplier loading ready
-13. Fill Supplier Ref.
-14. Fill Posting Date
-15. Fill Document Date
-16. Fill Remarks
-17. Click First Item No.
-18. Paste E:N entire block
-19. Wait for SAP calculation
-20. Restore original Clipboard
-21. Show success notification
-22. STOP
+1. Read Clipboard
+2. Validate B:N structure
+3. Reject header row
+4. Read B:D header values from the first row
+5. Validate nonblank later B:D values belong to the same Invoice
+6. Convert Date
+7. Load absolute-coordinate calibration.json
+8. Paste Supplier once
+9. Commit Supplier with TAB
+10. Wait for SAP Supplier loading
+11. Paste Supplier Ref. once
+12. Paste Posting Date once
+13. Paste Document Date once
+14. Paste Remarks once
+15. Build every selected E:N row as one tab-delimited block
+16. Click absolute First Item No. coordinate
+17. Paste the entire E:N block once
+18. Wait for SAP calculation
+19. Restore original Clipboard
+20. Show success notification
+21. STOP
 ```
 
 绝对不要：
 
 ```text
-23. Add
+22. Add
 ```
 
 ## 20. 输入实现
@@ -825,8 +771,6 @@ Win32 SendInput
 SetCursorPos
 SendInput mouse click
 SendInput keyboard
-GetForegroundWindow
-GetWindowThreadProcessId
 RegisterHotKey
 ```
 
@@ -981,15 +925,13 @@ SAP validation / calculation
 
 ## 24. 性能目标
 
-参考目标：
+公司电脑兼容性优先，参考目标：
 
 ```text
 Clipboard parse       < 10ms
-Supplier mapping      < 5ms
-Locate AP Invoice     < 30ms
 Read calibration      < 5ms
-Normal header fields  30–100ms each
-Supplier load         200–800ms typical
+Normal header fields  short guarded delays per field
+Supplier load         guarded 1.8-second commit delay
 Item paste            single operation
 ```
 
@@ -1006,13 +948,7 @@ F8
 →
 全部资料填完
 
-约 0.7–1.5 秒
-```
-
-整体 acceptable target：
-
-```text
-< 2 seconds
+约 3–6 秒，视 SAP 计算速度而定
 ```
 
 如果 item rows 很多，SAP 自己计算时间可以另外计算。
@@ -1250,7 +1186,6 @@ SapB1ExcelHelper/
 ├── Services/
 │   ├── ClipboardService.cs
 │   ├── ExcelClipboardParser.cs
-│   ├── SapWindowService.cs
 │   ├── SapAutomationService.cs
 │   ├── HotkeyService.cs
 │   ├── CalibrationService.cs
@@ -1336,11 +1271,9 @@ public class SapCalibration
 ✅ Preserve blank cells
 ✅ Header detection
 ✅ Same invoice validation
-✅ Supplier mapping
+✅ Direct Supplier Name paste
 ✅ Date conversion
-✅ Confirm SAP foreground
-✅ Locate AP Invoice window
-✅ Relative coordinate targeting
+✅ Absolute desktop coordinate targeting
 ✅ calibration.json
 ✅ Supplier
 ✅ Supplier Ref.
@@ -1434,20 +1367,12 @@ Repeated UI Automation Tree Scanning
 正常 runtime 应该：
 
 ```text
-Read saved relative coordinates
-+
-Locate AP Invoice window
+Read saved absolute desktop coordinates
 +
 Direct Win32 SendInput
 ```
 
-目标：
-
-```text
-sub-2-second execution
-```
-
-只有 Supplier SAP processing 和 Item validation 可以根据实际状态等待。
+目标是可靠的一次性粘贴；只有 Supplier SAP processing 和 Item validation 需要保守等待。
 
 ## 36. 给 Codex 的最终开发要求
 
@@ -1455,13 +1380,13 @@ sub-2-second execution
 >
 > Prioritize speed, reliability, minimal user interaction, and safe failure.
 >
-> Calibration must be a one-time setup workflow: capture each SAP field by having the user click it, convert the mouse screen position into coordinates relative to the AP Invoice window, and save those values.
+> Calibration must be a one-time setup workflow: capture each SAP field by having the user click it and save the exact absolute Windows desktop coordinates.
 >
 > Runtime automation must NOT use OCR, computer vision, screenshots, or repeated UI-tree scanning to locate fields.
 >
-> Use the stored relative coordinates and direct Win32 SendInput during normal F8 execution.
+> Use the stored absolute desktop coordinates and direct Win32 SendInput during normal F8 execution. Do not require SAP process, title, child-window, or control-class detection.
 >
-> Optimize the normal path for sub-2-second execution. Avoid fixed sleeps wherever possible. Use short polling only where SAP genuinely performs asynchronous work, especially after entering Supplier.
+> Prefer reliable field focus and Supplier commit timing on company PCs. Keep delays bounded and paste the item matrix only once.
 >
 > Paste the entire E:N item matrix as one tab-delimited clipboard block.
 >

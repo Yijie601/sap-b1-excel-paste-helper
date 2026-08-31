@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-beta.8
+
+- Switched calibration and runtime input to direct absolute desktop coordinates, removing SAP process, window-title, child-window, and focused-control detection from the paste path.
+- Header values now use clipboard paste exactly once per target: the first Excel B:D row supplies Supplier, both dates, Supplier Ref., and Remarks.
+- All selected Excel E:N rows are still rebuilt as one 10-column tab-delimited matrix and pasted once at First Item No.
+- Subsequent item rows may leave B:D blank; nonblank B:D values are still checked to prevent mixed invoices.
+- Added 50-row regression coverage and validation that Supplier Name never enters the item matrix.
+- Absolute-coordinate v2 calibration invalidates older relative coordinates and requires a one-time recapture of all six positions.
+
 ## 0.1.0-beta.7
 
 - Fixed `Test Calibration` and `Capture` closing and disposing the calibration window while it was temporarily hidden.

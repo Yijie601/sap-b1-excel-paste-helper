@@ -13,7 +13,7 @@
 - 不自动点击 SAP 的 **Add / Update**
 - 不自动切换窗口
 - 不依赖 Python
-- 每一步 F8 尽量在 **1 秒内完成**，步骤间等待由用户按 SAP 实际状态决定
+- 一次 F8 自动完成五个动作，Header paste 之间固定异步等待 **0.8 秒**
 
 目标体验：
 
@@ -23,9 +23,9 @@ Ctrl+C
 ↓
 用户自己切到 SAP AP Invoice
 ↓
-依次按 5 次 F8 / Logitech 鼠标侧键
+按 1 次 F8 / Logitech 鼠标侧键
 ↓
-逐步填写 4 个 Header + 整块 Items
+自动依次填写 4 个 Header + 整块 Items
 ↓
 停止
 ↓
@@ -77,13 +77,11 @@ dotnet publish -c Release -r win-x64 --self-contained true
 2. Ctrl+C
 3. 用户自己 Alt+Tab / 点击切换到 SAP
 4. 确保 SAP AP Invoice 已打开
-5. 按 F8：填写 Supplier
-6. 等 SAP 完成后再按 F8：填写 Posting Date
-7. 再按 F8：填写 Supplier Ref.
-8. 再按 F8：填写 Remarks
-9. 最后按 F8：一次粘贴全部 E:N Items
-10. 用户检查
-11. 用户自己按 Add
+5. 按一次 F8
+6. Helper 按 Supplier → Posting Date → Supplier Ref. → Remarks 自动粘贴，每次间隔 0.8 秒
+7. Helper 最后一次粘贴全部 E:N Items
+8. 用户检查
+9. 用户自己按 Add
 ```
 
 支持把 Logitech Options+ 鼠标侧键设置为：
@@ -712,17 +710,17 @@ SetForegroundWindow to guessed window
 Search Excel then switch SAP
 ```
 
-## 19. F8 分步执行顺序
+## 19. 单次 F8 执行顺序
 
 ```text
 1. Excel Ctrl+C 后读取并验证 B:N，解析第一行 B:D，同时建立所有行的 E:N block
-2. 第 1 次 F8：点击 Supplier，粘贴第一行 B
-3. 用户等 SAP 完成；第 2 次 F8：点击 Posting Date，粘贴转换后的第一行 C
-4. 第 3 次 F8：点击 Supplier Ref.，粘贴第一行 D
-5. 第 4 次 F8：点击 Remarks，粘贴第一行 D
-6. 第 5 次 F8：点击 First Item No.，一次粘贴所有已复制行的 E:N block
-7. 每一步都把原始 B:N 恢复为 plain text，并显示下一步；不恢复可能阻塞 UI 的完整 Excel OLE formats
-8. 第 5 步完成后停止，不循环；重新复制有效 B:N 才从 Supplier 重置
+2. F8：点击 Supplier，粘贴第一行 B，然后异步等待 0.8 秒
+3. 点击 Posting Date，粘贴转换后的第一行 C，然后异步等待 0.8 秒
+4. 点击 Supplier Ref.，粘贴第一行 D，然后异步等待 0.8 秒
+5. 点击 Remarks，粘贴第一行 D，然后异步等待 0.8 秒
+6. 点击 First Item No.，一次粘贴所有已复制行的 E:N block
+7. 每个动作都把原始 B:N 恢复为 plain text；不恢复可能阻塞 UI 的完整 Excel OLE formats
+8. Items 完成后停止
 ```
 
 绝对不要：
@@ -798,21 +796,21 @@ Paste/Input
 
 ## 22. Supplier 等待策略
 
-公司 SAP 对 synthetic Tab 和固定连续 timing 不稳定，因此 Helper 不再猜测 Supplier 是否处理完成，也不在一次 F8 内自动进入下一栏。
+公司 SAP 对 synthetic Tab 不稳定，因此 Helper 不发送 Tab，而是在一次 F8 内按坐标点击每个栏位，并使用固定 0.8 秒 paste guard。
 
 ```text
-第 1 次 F8：Fill Supplier
+Fill Supplier
 ↓
-用户观察 SAP 完成
+Wait 0.8s
 ↓
-第 2 次 F8：Fill Posting Date
+Fill Posting Date
 ↓
-用户观察 SAP 完成
+Wait 0.8s
 ↓
-第 3 次 F8：Fill Supplier Ref.
+Fill Supplier Ref.
 ```
 
-这样没有固定 1.8 秒等待，也不需要 SAP process、控件或 busy-state detection。
+这样不需要 SAP process、控件或 busy-state detection；所有等待均使用异步 Task.Delay，不阻塞 Helper UI。
 
 ## 23. Item Paste 性能
 
@@ -858,9 +856,9 @@ SAP validation / calculation
 ```text
 Clipboard parse       < 10ms
 Read calibration      < 5ms
-Each header F8        one click + one paste
-Between steps         user-controlled SAP wait
-Final item F8         single E:N paste operation
+Each header action    one click + one paste
+Between pastes        fixed asynchronous 0.8s guard
+Final item action     single E:N paste operation
 ```
 
 正常：
@@ -872,11 +870,11 @@ Final item F8         single E:N paste operation
 目标：
 
 ```text
-每次 F8
+一次 F8
 →
-只完成当前一个步骤
+自动完成五个 paste actions
 
-总时间由用户等 SAP 的速度决定
+约 4–7 秒，另加 SAP Items 计算时间
 ```
 
 如果 item rows 很多，SAP 自己计算时间可以另外计算。
@@ -1242,9 +1240,9 @@ Ctrl+C
 ↓
 切 SAP
 ↓
-F8 / Logitech Side Button × 5
+F8 / Logitech Side Button × 1
 ↓
-每次一个步骤，并显示 Next F8
+0.8 秒间隔自动完成五个动作
 ↓
 Done
 ```
@@ -1298,7 +1296,7 @@ Read saved absolute desktop coordinates
 Direct Win32 SendInput
 ```
 
-目标是可靠的分步 Header 输入；Items 始终保持一次性 E:N 整块粘贴。
+目标是可靠的单次 F8 Header 顺序输入；Items 始终保持一次性 E:N 整块粘贴。
 
 ## 36. 给 Codex 的最终开发要求
 

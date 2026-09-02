@@ -8,14 +8,60 @@ public sealed class SapAutomationException : Exception
     public SapAutomationException(string message) : base(message)
     {
     }
+
+    public SapAutomationException(string message, Exception innerException) : base(message, innerException)
+    {
+    }
 }
 
 public sealed record AutomationStepResult(SapPasteStep Step, TimeSpan Duration, int ItemRows);
+public sealed record AutomationResult(TimeSpan Duration, int ItemRows);
 
 public sealed class SapAutomationService
 {
     private static readonly TimeSpan FieldFocusDelay = TimeSpan.FromMilliseconds(90);
-    private static readonly TimeSpan FieldPasteDelay = TimeSpan.FromMilliseconds(700);
+    public static TimeSpan PasteInterval { get; } = TimeSpan.FromMilliseconds(800);
+
+    public async Task<AutomationResult> RunAllAsync(
+        InvoiceClipboardData invoice,
+        SapCalibration calibration,
+        Action<string>? progress = null)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        foreach (var (step, index) in SapPasteWorkflow.Steps.Select((step, index) => (step, index)))
+        {
+            var stepNumber = index + 1;
+            var stepLabel = SapPasteWorkflow.GetLabel(step);
+            AppLogger.StepStarted(
+                invoice.SupplierName,
+                invoice.DocumentNumber,
+                invoice.Items.Count,
+                stepNumber,
+                stepLabel);
+
+            try
+            {
+                var result = await RunStepAsync(invoice, calibration, step, progress);
+                AppLogger.StepSuccess(
+                    invoice.SupplierName,
+                    invoice.DocumentNumber,
+                    invoice.Items.Count,
+                    result.Duration,
+                    stepNumber,
+                    stepLabel);
+            }
+            catch (Exception exception)
+            {
+                throw new SapAutomationException(
+                    $"Step {stepNumber}/5 ({stepLabel}) stopped: {exception.Message}",
+                    exception);
+            }
+        }
+
+        stopwatch.Stop();
+        return new AutomationResult(stopwatch.Elapsed, invoice.Items.Count);
+    }
+
     public async Task<AutomationStepResult> RunStepAsync(
         InvoiceClipboardData invoice,
         SapCalibration calibration,
@@ -88,7 +134,7 @@ public sealed class SapAutomationService
         InputService.SelectAll();
         await Task.Delay(20);
         InputService.Paste();
-        await Task.Delay(FieldPasteDelay);
+        await Task.Delay(PasteInterval);
     }
 
     private static async Task ClickAbsolutePoint(SapPoint point)

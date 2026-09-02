@@ -18,7 +18,7 @@ var tests = new (string Name, Action Run)[]
     ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest),
     ("Validates and persists custom global hotkeys", HandlesCustomHotkeys),
     ("Requires every SAP position to be captured explicitly", RequiresCompleteCalibration),
-    ("Uses five separate F8 steps and pastes the item block last", UsesStepByStepPasteOrder)
+    ("Uses five ordered paste actions with an 0.8-second guard", UsesStepByStepPasteOrder)
 };
 
 var failures = 0;
@@ -385,6 +385,7 @@ static void UsesStepByStepPasteOrder()
     Equal(SapPasteStep.Remarks, SapPasteWorkflow.Steps[3]);
     Equal(SapPasteStep.Items, SapPasteWorkflow.Steps[4]);
     Equal("Item No. (entire E:N block)", SapPasteWorkflow.GetLabel(SapPasteWorkflow.Steps[^1]));
+    Equal(TimeSpan.FromMilliseconds(800), SapAutomationService.PasteInterval);
 }
 
 static string Row(params string[] cells)

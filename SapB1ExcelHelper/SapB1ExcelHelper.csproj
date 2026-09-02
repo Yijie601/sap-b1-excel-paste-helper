@@ -8,7 +8,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>SapB1ExcelHelper</AssemblyName>
     <RootNamespace>SapB1ExcelHelper</RootNamespace>
-    <Version>0.1.0-beta.13</Version>
+    <Version>0.1.0-beta.14</Version>
     <Authors>Yijie601</Authors>
     <Description>Fast clipboard-to-SAP Business One AP Invoice helper.</Description>
     <PublishSingleFile>true</PublishSingleFile>

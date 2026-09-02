@@ -8,7 +8,7 @@ A lightweight Windows tray utility that validates copied Excel AP Invoice rows a
 2. Press `Ctrl+C`. The helper validates and prepares the invoice immediately.
 3. Confirm the helper status is **Ready**.
 4. Switch to SAP Business One and make sure **AP Invoice** is active.
-5. Press the configured global hotkey (`F8` by default) once for each step, checking SAP between presses:
+5. Press the configured global hotkey (`F8` by default) once. The helper runs these five paste actions automatically, with a 0.8-second guard between header pastes:
    1. Supplier
    2. Posting Date
    3. Supplier Ref.
@@ -16,7 +16,7 @@ A lightweight Windows tray utility that validates copied Excel AP Invoice rows a
    5. First Item No. — paste the entire copied E:N item block
 
 Click the **Hotkey** link in the main status panel, or choose **Hotkey Settings** from the tray menu, to change the shortcut. Function keys F1–F24 can be used alone; other keys require Ctrl or Alt. The setting is saved under `%LOCALAPPDATA%\SapB1ExcelHelper\Config` and remains after updates.
-6. After the fifth press, review the completed invoice and click **Add** yourself.
+6. After the sequence completes, review the invoice and click **Add** yourself.
 
 The helper never clicks SAP **Add** or **Update**.
 
@@ -50,9 +50,9 @@ The helper expects 13 tab-separated columns corresponding to Excel B:N. It valid
 - a nonblank SAP Code / Item No. in column E for every selected row;
 - dates in `dd-MM-yyyy`, `dd/MM/yyyy`, `dd.MM.yyyy`, or `yyyy-MM-dd` format.
 
-The helper keeps the validated copy in memory and performs one action per F8 press. Presses 1–4 use the first row only: Excel B goes to Supplier, C goes to Posting Date as `dd.MM.yy`, and D goes to both Supplier Ref. and Remarks. No Tab key is sent, and SAP updates Document Date automatically. Press 5 clicks First Item No. and pastes all copied E:N rows once as one 10-column matrix. Empty item cells remain in their original positions, whether the copy contains 2 rows or dozens.
+The helper keeps the validated copy in memory and performs five actions from one F8 press. Actions 1–4 use the first row only: Excel B goes to Supplier, C goes to Posting Date as `dd.MM.yy`, and D goes to both Supplier Ref. and Remarks. No Tab key is sent, and SAP updates Document Date automatically. After each header paste the helper waits 0.8 seconds asynchronously, then moves to the next calibrated position. Action 5 clicks First Item No. and pastes all copied E:N rows once as one 10-column matrix. Empty item cells remain in their original positions, whether the copy contains 2 rows or dozens.
 
-Copy another valid B:N selection to reset the sequence to Supplier. If a step fails, it stays on that step so F8 retries it. After step 5, further F8 presses are blocked until Excel B:N is copied again. The helper keeps the parsed invoice in memory and restores the copied B:N as plain text after each step; it does not repeatedly reload Excel's heavier OLE clipboard formats.
+The helper keeps the parsed invoice in memory and restores the copied B:N as plain text after each action; it does not repeatedly reload Excel's heavier OLE clipboard formats.
 
 ## Data locations
 
@@ -86,7 +86,7 @@ Requirements:
 ```powershell
 dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
 dotnet publish .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish
-& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.13 .\installer\SapB1ExcelHelper.nsi
+& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.14 .\installer\SapB1ExcelHelper.nsi
 ```
 
 ## Publishing a new version

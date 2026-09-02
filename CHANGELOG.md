@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.14
+
+- Changed the runtime back to a single F8 operation while retaining five separately targeted paste actions.
+- The automatic order is Supplier, Posting Date, Supplier Ref., Remarks, then the entire copied E:N item block.
+- Added an asynchronous 0.8-second guard after each header paste before moving to the next SAP field.
+- Retained the beta 13 plain-text clipboard fix so the automatic sequence does not restore Excel OLE formats or freeze the helper UI.
+
 ## 0.1.0-beta.13
 
 - Removed full Excel OLE clipboard snapshot/restore from every F8 step, which could block the UI and show Not Responding on company PCs.

@@ -29,7 +29,6 @@ public sealed class MainForm : Form
     private CalibrationForm? _calibrationForm;
     private string _lastValidationError = "Copy Excel columns B:N first.";
     private DateTime _ignoreClipboardUntilUtc;
-    private int _nextPasteStepIndex;
     private bool _automationRunning;
     private bool _allowExit;
     private bool _hotkeyRegistered;
@@ -93,7 +92,7 @@ public sealed class MainForm : Form
         };
         _modeLabel = new Label
         {
-            Text = "Mode: Step-by-step F8 (5 steps)",
+            Text = "Mode: One F8 • 0.8s paste interval",
             AutoSize = true,
             ForeColor = Color.FromArgb(85, 91, 101),
             Location = new Point(22, 92)
@@ -172,7 +171,7 @@ public sealed class MainForm : Form
         Shown += async (_, _) =>
         {
             await Task.Delay(100);
-            ValidateCurrentClipboard(resetSequence: true);
+            ValidateCurrentClipboard();
             await CheckForUpdatesAsync(userInitiated: false);
         };
     }
@@ -211,7 +210,6 @@ public sealed class MainForm : Form
                  DateTime.UtcNow >= _ignoreClipboardUntilUtc &&
                  !_automationRunning)
         {
-            ResetPasteSequence();
             _ = ValidateClipboardAfterDelayAsync();
         }
 
@@ -231,10 +229,10 @@ public sealed class MainForm : Form
     private async Task ValidateClipboardAfterDelayAsync()
     {
         await Task.Delay(45);
-        ValidateCurrentClipboard(resetSequence: true);
+        ValidateCurrentClipboard();
     }
 
-    private bool ValidateCurrentClipboard(bool resetSequence)
+    private bool ValidateCurrentClipboard()
     {
         var text = ClipboardService.TryGetText();
         if (text is null)
@@ -247,10 +245,6 @@ public sealed class MainForm : Form
         {
             var invoice = _parser.Parse(text);
             _preparedInvoice = invoice;
-            if (resetSequence)
-            {
-                ResetPasteSequence();
-            }
             _lastValidationError = string.Empty;
             SetReady(invoice);
             return true;
@@ -287,22 +281,12 @@ public sealed class MainForm : Form
             currentText is null ||
             !string.Equals(currentText, _preparedInvoice.OriginalClipboardText, StringComparison.Ordinal))
         {
-            ValidateCurrentClipboard(resetSequence: true);
+            ValidateCurrentClipboard();
         }
 
         if (_preparedInvoice is null)
         {
             ShowError(_lastValidationError);
-            return;
-        }
-
-        if (_nextPasteStepIndex >= SapPasteWorkflow.Steps.Count)
-        {
-            MessageBox.Show(
-                "All five steps for this copied invoice are complete. Copy the next Excel B:N selection to start again.",
-                "Paste sequence complete",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
             return;
         }
 
@@ -316,20 +300,10 @@ public sealed class MainForm : Form
         }
 
         var invoice = _preparedInvoice;
-        var stepIndex = _nextPasteStepIndex;
-        var stepNumber = stepIndex + 1;
-        var step = SapPasteWorkflow.Steps[stepIndex];
-        var stepLabel = SapPasteWorkflow.GetLabel(step);
         _automationRunning = true;
         _runButton.Enabled = false;
         _ignoreClipboardUntilUtc = DateTime.UtcNow.AddSeconds(6);
-        SetWorking($"Step {stepNumber}/5: {stepLabel}...");
-        AppLogger.StepStarted(
-            invoice.SupplierName,
-            invoice.DocumentNumber,
-            invoice.Items.Count,
-            stepNumber,
-            stepLabel);
+        SetWorking("Starting five-step SAP paste...");
         var started = Stopwatch.StartNew();
 
         try
@@ -340,37 +314,18 @@ public sealed class MainForm : Form
                 await Task.Delay(250);
             }
 
-            var result = await _automationService.RunStepAsync(
+            var result = await _automationService.RunAllAsync(
                 invoice,
                 calibration,
-                step,
                 message => SetWorking(message));
 
-            AppLogger.StepSuccess(
+            AppLogger.Success(
                 invoice.SupplierName,
                 invoice.DocumentNumber,
-                invoice.Items.Count,
-                result.Duration,
-                stepNumber,
-                stepLabel);
-
-            _nextPasteStepIndex++;
-            if (_nextPasteStepIndex >= SapPasteWorkflow.Steps.Count)
-            {
-                AppLogger.Success(
-                    invoice.SupplierName,
-                    invoice.DocumentNumber,
-                    result.ItemRows,
-                    result.Duration);
-                SetReady(invoice, $"All 5 steps complete — {invoice.Items.Count} E:N row(s) pasted. Check SAP before Add.");
-                ShowSuccess(invoice, result);
-            }
-            else
-            {
-                var nextLabel = SapPasteWorkflow.GetLabel(SapPasteWorkflow.Steps[_nextPasteStepIndex]);
-                SetReady(invoice, $"Step {stepNumber}/5 complete: {stepLabel}. Next F8: {nextLabel}.");
-                ShowStepSuccess(stepNumber, stepLabel, nextLabel);
-            }
+                result.ItemRows,
+                result.Duration);
+            SetReady(invoice, $"All 5 steps completed in {result.Duration.TotalSeconds:0.00}s — check SAP before Add.");
+            ShowSuccess(invoice, result);
         }
         catch (Exception exception)
         {
@@ -380,8 +335,8 @@ public sealed class MainForm : Form
                 invoice.DocumentNumber,
                 invoice.Items.Count,
                 started.Elapsed,
-                $"Step {stepNumber}/5 ({stepLabel}): {exception.Message}");
-            SetNotReady($"Step {stepNumber}/5 failed: {exception.Message} — fix SAP and press F8 to retry this step.", keepInvoice: true);
+                exception.Message);
+            SetNotReady($"Stopped: {exception.Message}", keepInvoice: true);
             ShowError(exception.Message);
         }
         finally
@@ -525,9 +480,8 @@ public sealed class MainForm : Form
             return;
         }
 
-        var nextStep = SapPasteWorkflow.Steps[_nextPasteStepIndex];
         _invoiceLabel.Text =
-            $"Next F8 1/5: {SapPasteWorkflow.GetLabel(nextStep)}  •  {invoice.DocumentNumber}  •  {invoice.Items.Count} row(s)";
+            $"{invoice.DocumentNumber}  •  {invoice.SupplierName}  •  {invoice.Items.Count} row(s)  •  {invoice.SapDate}";
     }
 
     private void SetNotReady(string message, bool keepInvoice = false)
@@ -550,23 +504,13 @@ public sealed class MainForm : Form
         _invoiceLabel.Text = message;
     }
 
-    private void ShowSuccess(InvoiceClipboardData invoice, AutomationStepResult result)
+    private void ShowSuccess(InvoiceClipboardData invoice, AutomationResult result)
     {
         _trayIcon.BalloonTipTitle = $"✓ {invoice.DocumentNumber}";
         _trayIcon.BalloonTipText = $"{result.ItemRows} item row(s) pasted in {result.Duration.TotalSeconds:0.00}s. Check SAP before Add.";
         _trayIcon.BalloonTipIcon = ToolTipIcon.Info;
         _trayIcon.ShowBalloonTip(1800);
     }
-
-    private void ShowStepSuccess(int stepNumber, string stepLabel, string nextLabel)
-    {
-        _trayIcon.BalloonTipTitle = $"Step {stepNumber}/5 complete";
-        _trayIcon.BalloonTipText = $"{stepLabel} pasted. Next F8: {nextLabel}.";
-        _trayIcon.BalloonTipIcon = ToolTipIcon.Info;
-        _trayIcon.ShowBalloonTip(1800);
-    }
-
-    private void ResetPasteSequence() => _nextPasteStepIndex = 0;
 
     private static void ShowError(string message) => MessageBox.Show(
         message,
@@ -671,10 +615,10 @@ public sealed class MainForm : Form
     private void RefreshHotkeyText()
     {
         var hotkeyText = _hotkey.DisplayText;
-        _subtitleLabel.Text = $"Copy Excel B:N once. In SAP, press {hotkeyText} once per step (5 presses total).";
+        _subtitleLabel.Text = $"Copy Excel B:N, switch to SAP AP Invoice, then press {hotkeyText} once.";
         _hotkeyLabel.Text = $"Hotkey: {hotkeyText}";
-        _runButton.Text = $"Paste Next ({hotkeyText})";
-        _trayRunItem.Text = $"Paste Next ({hotkeyText})";
+        _runButton.Text = $"Run Now ({hotkeyText})";
+        _trayRunItem.Text = $"Run Now ({hotkeyText})";
     }
 
     private static void ShowHotkeyUnavailable(HotkeyDefinition hotkey) => MessageBox.Show(

@@ -10,17 +10,16 @@ public sealed class SapAutomationException : Exception
     }
 }
 
-public sealed record AutomationResult(TimeSpan Duration, int ItemRows);
+public sealed record AutomationStepResult(SapPasteStep Step, TimeSpan Duration, int ItemRows);
 
 public sealed class SapAutomationService
 {
     private static readonly TimeSpan FieldFocusDelay = TimeSpan.FromMilliseconds(90);
     private static readonly TimeSpan FieldPasteDelay = TimeSpan.FromMilliseconds(120);
-    private static readonly TimeSpan SupplierCommitDelay = TimeSpan.FromMilliseconds(1800);
-
-    public async Task<AutomationResult> RunAsync(
+    public async Task<AutomationStepResult> RunStepAsync(
         InvoiceClipboardData invoice,
         SapCalibration calibration,
+        SapPasteStep step,
         Action<string>? progress = null)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -30,29 +29,39 @@ public sealed class SapAutomationService
         {
             ValidateAbsoluteDesktopCoordinates(calibration);
 
-            progress?.Invoke("Filling Supplier...");
-            await PasteTextField(calibration.Supplier, invoice.SapSupplierValue);
-
-            progress?.Invoke("Filling Posting Date...");
-            await PasteTextField(calibration.PostingDate, invoice.SapDate);
-
-            progress?.Invoke("Waiting for SAP Supplier and date processing...");
-            await Task.Delay(SupplierCommitDelay);
-
-            progress?.Invoke("Filling Supplier Ref...");
-            await PasteTextField(calibration.SupplierRef, invoice.DocumentNumber);
-
-            progress?.Invoke("Filling Remarks...");
-            await PasteTextField(calibration.Remarks, invoice.DocumentNumber);
-
-            progress?.Invoke($"Pasting {invoice.Items.Count} item row(s)...");
-            ClipboardService.SetText(invoice.ItemClipboardBlock);
-            await ClickAbsolutePoint(calibration.ItemNo);
-            InputService.Paste();
-            await Task.Delay(ItemPasteDelay(invoice.Items.Count));
+            var itemRows = 0;
+            switch (step)
+            {
+                case SapPasteStep.Supplier:
+                    progress?.Invoke("Step 1/5: Pasting Supplier...");
+                    await PasteTextField(calibration.Supplier, invoice.SapSupplierValue);
+                    break;
+                case SapPasteStep.PostingDate:
+                    progress?.Invoke("Step 2/5: Pasting Posting Date...");
+                    await PasteTextField(calibration.PostingDate, invoice.SapDate);
+                    break;
+                case SapPasteStep.SupplierRef:
+                    progress?.Invoke("Step 3/5: Pasting Supplier Ref...");
+                    await PasteTextField(calibration.SupplierRef, invoice.DocumentNumber);
+                    break;
+                case SapPasteStep.Remarks:
+                    progress?.Invoke("Step 4/5: Pasting Remarks...");
+                    await PasteTextField(calibration.Remarks, invoice.DocumentNumber);
+                    break;
+                case SapPasteStep.Items:
+                    progress?.Invoke($"Step 5/5: Pasting the entire E:N block ({invoice.Items.Count} rows)...");
+                    ClipboardService.SetText(invoice.ItemClipboardBlock);
+                    await ClickAbsolutePoint(calibration.ItemNo);
+                    InputService.Paste();
+                    await Task.Delay(ItemPasteDelay(invoice.Items.Count));
+                    itemRows = invoice.Items.Count;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(step), step, null);
+            }
 
             stopwatch.Stop();
-            return new AutomationResult(stopwatch.Elapsed, invoice.Items.Count);
+            return new AutomationStepResult(step, stopwatch.Elapsed, itemRows);
         }
         finally
         {

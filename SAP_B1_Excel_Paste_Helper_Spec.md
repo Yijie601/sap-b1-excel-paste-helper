@@ -13,7 +13,7 @@
 - 不自动点击 SAP 的 **Add / Update**
 - 不自动切换窗口
 - 不依赖 Python
-- 正常操作尽量控制在 **1–2 秒内完成**
+- 每一步 F8 尽量在 **1 秒内完成**，步骤间等待由用户按 SAP 实际状态决定
 
 目标体验：
 
@@ -23,9 +23,9 @@ Ctrl+C
 ↓
 用户自己切到 SAP AP Invoice
 ↓
-按 F8 / Logitech 鼠标侧键
+依次按 5 次 F8 / Logitech 鼠标侧键
 ↓
-自动填写 Header + Items
+逐步填写 4 个 Header + 整块 Items
 ↓
 停止
 ↓
@@ -77,12 +77,13 @@ dotnet publish -c Release -r win-x64 --self-contained true
 2. Ctrl+C
 3. 用户自己 Alt+Tab / 点击切换到 SAP
 4. 确保 SAP AP Invoice 已打开
-5. 按 F8
-6. Helper 读取 Clipboard
-7. Helper 自动填写整张 Invoice
-8. Helper 停止
-9. 用户检查
-10. 用户自己按 Add
+5. 按 F8：填写 Supplier
+6. 等 SAP 完成后再按 F8：填写 Posting Date
+7. 再按 F8：填写 Supplier Ref.
+8. 再按 F8：填写 Remarks
+9. 最后按 F8：一次粘贴全部 E:N Items
+10. 用户检查
+11. 用户自己按 Add
 ```
 
 支持把 Logitech Options+ 鼠标侧键设置为：
@@ -711,28 +712,17 @@ SetForegroundWindow to guessed window
 Search Excel then switch SAP
 ```
 
-## 19. F8 执行顺序
+## 19. F8 分步执行顺序
 
 ```text
-1. Read Clipboard
-2. Validate B:N structure
-3. Reject header row
-4. Read B:D header values from the first row
-5. Validate nonblank later B:D values belong to the same Invoice
-6. Convert Date
-7. Load absolute-coordinate calibration.json
-8. Paste Supplier once
-9. Click and paste Posting Date once; leaving Supplier commits it and SAP updates Document Date
-10. Wait for SAP Supplier/date processing
-11. Click Supplier Ref. and paste Document Number once
-12. Click Remarks and paste Document Number once
-13. Build every selected E:N row as one tab-delimited block
-14. Click absolute First Item No. coordinate
-15. Paste the entire E:N block once
-16. Wait for SAP calculation
-17. Restore original Clipboard
-18. Show success notification
-19. STOP
+1. Excel Ctrl+C 后读取并验证 B:N，解析第一行 B:D，同时建立所有行的 E:N block
+2. 第 1 次 F8：点击 Supplier，粘贴第一行 B
+3. 用户等 SAP 完成；第 2 次 F8：点击 Posting Date，粘贴转换后的第一行 C
+4. 第 3 次 F8：点击 Supplier Ref.，粘贴第一行 D
+5. 第 4 次 F8：点击 Remarks，粘贴第一行 D
+6. 第 5 次 F8：点击 First Item No.，一次粘贴所有已复制行的 E:N block
+7. 每一步都恢复原 Clipboard，并显示下一步；失败时保留当前步骤供重试
+8. 第 5 步完成后停止，不循环；重新复制有效 B:N 才从 Supplier 重置
 ```
 
 绝对不要：
@@ -806,63 +796,23 @@ Paste/Input
 约 30–100 ms
 ```
 
-## 22. Supplier 等待优化
+## 22. Supplier 等待策略
 
-Supplier 是唯一比较可能需要等待 SAP 后台处理的地方。
-
-流程：
+公司 SAP 对 synthetic Tab 和固定连续 timing 不稳定，因此 Helper 不再猜测 Supplier 是否处理完成，也不在一次 F8 内自动进入下一栏。
 
 ```text
-Fill Supplier Code
+第 1 次 F8：Fill Supplier
 ↓
-Click and fill Posting Date
+用户观察 SAP 完成
 ↓
-Wait up to the bounded Supplier/date processing delay
+第 2 次 F8：Fill Posting Date
 ↓
-Click and fill Supplier Ref.
+用户观察 SAP 完成
+↓
+第 3 次 F8：Fill Supplier Ref.
 ```
 
-公司 SAP 实机目前使用 bounded 1.8-second wait，优先保证字段完成加载。
-
-应该使用：
-
-```text
-Polling
-```
-
-例如每：
-
-```text
-30–50ms
-```
-
-检测：
-
-- Item Matrix 是否已经可点击
-- active editor 是否变化
-- Supplier Name 是否已经出现
-- SAP UI 是否结束 busy state
-- 或其他稳定 signal
-
-最大 timeout：
-
-```text
-2–3 seconds
-```
-
-SAP 如果：
-
-```text
-300ms
-```
-
-就准备好：
-
-```text
-300ms 后立刻继续
-```
-
-不要傻等完整 timeout。
+这样没有固定 1.8 秒等待，也不需要 SAP process、控件或 busy-state detection。
 
 ## 23. Item Paste 性能
 
@@ -908,9 +858,9 @@ SAP validation / calculation
 ```text
 Clipboard parse       < 10ms
 Read calibration      < 5ms
-Normal header fields  short guarded delays per field
-Supplier load         guarded 1.8-second commit delay
-Item paste            single operation
+Each header F8        one click + one paste
+Between steps         user-controlled SAP wait
+Final item F8         single E:N paste operation
 ```
 
 正常：
@@ -922,11 +872,11 @@ Item paste            single operation
 目标：
 
 ```text
-F8
+每次 F8
 →
-全部资料填完
+只完成当前一个步骤
 
-约 3–6 秒，视 SAP 计算速度而定
+总时间由用户等 SAP 的速度决定
 ```
 
 如果 item rows 很多，SAP 自己计算时间可以另外计算。
@@ -1292,9 +1242,9 @@ Ctrl+C
 ↓
 切 SAP
 ↓
-F8 / Logitech Side Button
+F8 / Logitech Side Button × 5
 ↓
-约 1 秒
+每次一个步骤，并显示 Next F8
 ↓
 Done
 ```
@@ -1348,7 +1298,7 @@ Read saved absolute desktop coordinates
 Direct Win32 SendInput
 ```
 
-目标是可靠的一次性粘贴；只有 Supplier SAP processing 和 Item validation 需要保守等待。
+目标是可靠的分步 Header 输入；Items 始终保持一次性 E:N 整块粘贴。
 
 ## 36. 给 Codex 的最终开发要求
 

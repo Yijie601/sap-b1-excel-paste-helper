@@ -10,6 +10,15 @@ public static class AppLogger
     public static void Success(string supplier, string documentNumber, int rows, TimeSpan duration) =>
         Write("SUCCESS", supplier, documentNumber, rows, duration, null, null);
 
+    public static void StepSuccess(
+        string supplier,
+        string documentNumber,
+        int rows,
+        TimeSpan duration,
+        int stepNumber,
+        string stepLabel) =>
+        Write($"STEP_SUCCESS {stepNumber}/5 {stepLabel}", supplier, documentNumber, rows, duration, null, null);
+
     public static void Failure(string? supplier, string? documentNumber, int rows, TimeSpan duration, string error) =>
         Write("ERROR", supplier, documentNumber, rows, duration, error, null);
 

@@ -17,7 +17,8 @@ var tests = new (string Name, Action Run)[]
     ("Selects the newest compatible GitHub release asset", SelectsNewestUpdate),
     ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest),
     ("Validates and persists custom global hotkeys", HandlesCustomHotkeys),
-    ("Requires every SAP position to be captured explicitly", RequiresCompleteCalibration)
+    ("Requires every SAP position to be captured explicitly", RequiresCompleteCalibration),
+    ("Uses five separate F8 steps and pastes the item block last", UsesStepByStepPasteOrder)
 };
 
 var failures = 0;
@@ -373,6 +374,17 @@ static void RequiresCompleteCalibration()
         "A four-point beta 10 calibration must request the new Supplier Ref. click target.");
     True(beta10Calibration!.MissingFields.SequenceEqual(new[] { "Supplier Ref." }),
         "Only Supplier Ref. should be missing from a complete beta 10 calibration.");
+}
+
+static void UsesStepByStepPasteOrder()
+{
+    Equal(5, SapPasteWorkflow.Steps.Count);
+    Equal(SapPasteStep.Supplier, SapPasteWorkflow.Steps[0]);
+    Equal(SapPasteStep.PostingDate, SapPasteWorkflow.Steps[1]);
+    Equal(SapPasteStep.SupplierRef, SapPasteWorkflow.Steps[2]);
+    Equal(SapPasteStep.Remarks, SapPasteWorkflow.Steps[3]);
+    Equal(SapPasteStep.Items, SapPasteWorkflow.Steps[4]);
+    Equal("Item No. (entire E:N block)", SapPasteWorkflow.GetLabel(SapPasteWorkflow.Steps[^1]));
 }
 
 static string Row(params string[] cells)

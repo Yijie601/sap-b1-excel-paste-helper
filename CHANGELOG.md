@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-beta.12
+
+- Replaced the single automatic run with a five-press F8 sequence: Supplier, Posting Date, Supplier Ref., Remarks, then Items.
+- Each F8 press performs exactly one calibrated click and one paste, so the user decides when SAP is ready for the next field.
+- The fifth F8 press clicks First Item No. and pastes every copied Excel E:N row as one 10-column tab-delimited block.
+- Copying a valid B:N selection resets the sequence to Supplier; a failed step remains selected for a safe retry, and a completed sequence cannot accidentally cycle back into Supplier.
+- Added visible next-step notifications and per-step log entries for company-PC troubleshooting.
+
 ## 0.1.0-beta.11
 
 - Removed simulated Tab keys from the SAP paste flow because the target SAP client can reject synthetic Tab input.

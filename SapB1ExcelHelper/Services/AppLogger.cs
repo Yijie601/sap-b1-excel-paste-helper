@@ -19,6 +19,14 @@ public static class AppLogger
         string stepLabel) =>
         Write($"STEP_SUCCESS {stepNumber}/5 {stepLabel}", supplier, documentNumber, rows, duration, null, null);
 
+    public static void StepStarted(
+        string supplier,
+        string documentNumber,
+        int rows,
+        int stepNumber,
+        string stepLabel) =>
+        Write($"STEP_STARTED {stepNumber}/5 {stepLabel}", supplier, documentNumber, rows, TimeSpan.Zero, null, null);
+
     public static void Failure(string? supplier, string? documentNumber, int rows, TimeSpan duration, string error) =>
         Write("ERROR", supplier, documentNumber, rows, duration, error, null);
 

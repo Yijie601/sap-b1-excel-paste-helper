@@ -15,7 +15,7 @@ public sealed record AutomationStepResult(SapPasteStep Step, TimeSpan Duration, 
 public sealed class SapAutomationService
 {
     private static readonly TimeSpan FieldFocusDelay = TimeSpan.FromMilliseconds(90);
-    private static readonly TimeSpan FieldPasteDelay = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan FieldPasteDelay = TimeSpan.FromMilliseconds(700);
     public async Task<AutomationStepResult> RunStepAsync(
         InvoiceClipboardData invoice,
         SapCalibration calibration,
@@ -23,8 +23,6 @@ public sealed class SapAutomationService
         Action<string>? progress = null)
     {
         var stopwatch = Stopwatch.StartNew();
-        var clipboard = ClipboardSnapshot.Capture();
-
         try
         {
             ValidateAbsoluteDesktopCoordinates(calibration);
@@ -67,7 +65,9 @@ public sealed class SapAutomationService
         {
             try
             {
-                clipboard.Restore();
+                // Restoring Excel's complete OLE IDataObject can block the UI thread on
+                // slower company PCs. The parsed B:N text is all this workflow needs.
+                ClipboardService.SetText(invoice.OriginalClipboardText);
             }
             catch (Exception exception)
             {

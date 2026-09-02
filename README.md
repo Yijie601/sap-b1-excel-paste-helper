@@ -52,7 +52,7 @@ The helper expects 13 tab-separated columns corresponding to Excel B:N. It valid
 
 The helper keeps the validated copy in memory and performs one action per F8 press. Presses 1–4 use the first row only: Excel B goes to Supplier, C goes to Posting Date as `dd.MM.yy`, and D goes to both Supplier Ref. and Remarks. No Tab key is sent, and SAP updates Document Date automatically. Press 5 clicks First Item No. and pastes all copied E:N rows once as one 10-column matrix. Empty item cells remain in their original positions, whether the copy contains 2 rows or dozens.
 
-Copy another valid B:N selection to reset the sequence to Supplier. If a step fails, it stays on that step so F8 retries it. After step 5, further F8 presses are blocked until Excel B:N is copied again.
+Copy another valid B:N selection to reset the sequence to Supplier. If a step fails, it stays on that step so F8 retries it. After step 5, further F8 presses are blocked until Excel B:N is copied again. The helper keeps the parsed invoice in memory and restores the copied B:N as plain text after each step; it does not repeatedly reload Excel's heavier OLE clipboard formats.
 
 ## Data locations
 
@@ -86,7 +86,7 @@ Requirements:
 ```powershell
 dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
 dotnet publish .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release -r win-x64 --self-contained true -o .\artifacts\publish
-& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.12 .\installer\SapB1ExcelHelper.nsi
+& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DAPP_VERSION=0.1.0-beta.13 .\installer\SapB1ExcelHelper.nsi
 ```
 
 ## Publishing a new version

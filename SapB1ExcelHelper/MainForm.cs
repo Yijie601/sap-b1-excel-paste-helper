@@ -324,6 +324,12 @@ public sealed class MainForm : Form
         _runButton.Enabled = false;
         _ignoreClipboardUntilUtc = DateTime.UtcNow.AddSeconds(6);
         SetWorking($"Step {stepNumber}/5: {stepLabel}...");
+        AppLogger.StepStarted(
+            invoice.SupplierName,
+            invoice.DocumentNumber,
+            invoice.Items.Count,
+            stepNumber,
+            stepLabel);
         var started = Stopwatch.StartNew();
 
         try

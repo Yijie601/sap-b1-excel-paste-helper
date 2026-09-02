@@ -721,7 +721,7 @@ Search Excel then switch SAP
 4. 第 3 次 F8：点击 Supplier Ref.，粘贴第一行 D
 5. 第 4 次 F8：点击 Remarks，粘贴第一行 D
 6. 第 5 次 F8：点击 First Item No.，一次粘贴所有已复制行的 E:N block
-7. 每一步都恢复原 Clipboard，并显示下一步；失败时保留当前步骤供重试
+7. 每一步都把原始 B:N 恢复为 plain text，并显示下一步；不恢复可能阻塞 UI 的完整 Excel OLE formats
 8. 第 5 步完成后停止，不循环；重新复制有效 B:N 才从 Supplier 重置
 ```
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.13
+
+- Removed full Excel OLE clipboard snapshot/restore from every F8 step, which could block the UI and show Not Responding on company PCs.
+- The helper now keeps the already parsed invoice in memory and restores only its plain B:N text after each step.
+- Increased the post-paste guard time for header fields while keeping it asynchronous, giving SAP more time to consume Ctrl+V without freezing the helper UI.
+- Added a STEP_STARTED log entry before every click so a company-PC issue can be traced to the exact F8 step.
+
 ## 0.1.0-beta.12
 
 - Replaced the single automatic run with a five-press F8 sequence: Supplier, Posting Date, Supplier Ref., Remarks, then Items.

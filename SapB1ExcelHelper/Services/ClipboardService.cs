@@ -2,54 +2,6 @@ using System.Runtime.InteropServices;
 
 namespace SapB1ExcelHelper.Services;
 
-public sealed class ClipboardSnapshot
-{
-    private readonly IDataObject? _dataObject;
-    private readonly string? _fallbackText;
-
-    private ClipboardSnapshot(IDataObject? dataObject, string? fallbackText)
-    {
-        _dataObject = dataObject;
-        _fallbackText = fallbackText;
-    }
-
-    public static ClipboardSnapshot Capture()
-    {
-        IDataObject? dataObject = null;
-        string? text = null;
-        ClipboardService.Retry(() =>
-        {
-            dataObject = Clipboard.GetDataObject();
-            if (Clipboard.ContainsText(TextDataFormat.UnicodeText))
-            {
-                text = Clipboard.GetText(TextDataFormat.UnicodeText);
-            }
-        });
-        return new ClipboardSnapshot(dataObject, text);
-    }
-
-    public void Restore()
-    {
-        try
-        {
-            if (_dataObject is not null)
-            {
-                ClipboardService.Retry(() => Clipboard.SetDataObject(_dataObject, true));
-                return;
-            }
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Error("CLIPBOARD_RESTORE_FALLBACK", exception.Message, exception);
-        }
-
-        if (_fallbackText is not null)
-        {
-            ClipboardService.SetText(_fallbackText);
-        }
-    }
-}
-
 public static class ClipboardService
 {
     public static string? TryGetText()

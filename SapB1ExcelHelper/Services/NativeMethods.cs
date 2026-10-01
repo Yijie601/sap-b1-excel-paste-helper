@@ -15,6 +15,63 @@ internal static class NativeMethods
     internal const uint ModNoRepeat = 0x4000;
     internal delegate nint LowLevelMouseProc(int code, nint message, nint data);
 
+    [DllImport("user32.dll")]
+    internal static extern uint GetClipboardSequenceNumber();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool OpenClipboard(nint ownerWindow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool CloseClipboard();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsClipboardFormatAvailable(uint format);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern nint GetClipboardData(uint format);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool EmptyClipboard();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern nint SetClipboardData(uint format, nint memory);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern nint GlobalAlloc(uint flags, nuint size);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern nint GlobalLock(nint memory);
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GlobalUnlock(nint memory);
+
+    [DllImport("kernel32.dll")]
+    internal static extern nint GlobalFree(nint memory);
+
+    [DllImport("kernel32.dll")]
+    internal static extern nuint GlobalSize(nint memory);
+
+    [DllImport("user32.dll")]
+    internal static extern nint WindowFromPoint(Point point);
+
+    [DllImport("user32.dll")]
+    internal static extern nint GetAncestor(nint window, uint flags);
+
+    [DllImport("user32.dll")]
+    internal static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    internal static extern short GetAsyncKeyState(int virtualKey);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetWindowRect(nint window, out NativeRect rectangle);
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool RegisterHotKey(nint window, int id, uint modifiers, uint virtualKey);
@@ -69,6 +126,16 @@ internal static class NativeMethods
         internal uint Flags;
         internal uint Time;
         internal nuint ExtraInfo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct NativeRect
+    {
+        internal int Left;
+        internal int Top;
+        internal int Right;
+        internal int Bottom;
+        internal readonly Rectangle Rectangle => Rectangle.FromLTRB(Left, Top, Right, Bottom);
     }
 
     [StructLayout(LayoutKind.Sequential)]

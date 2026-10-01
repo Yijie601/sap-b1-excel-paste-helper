@@ -2,9 +2,10 @@ Unicode True
 SetCompressor /SOLID lzma
 
 !include "MUI2.nsh"
+!include "FileFunc.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.1.0-beta.14"
+  !define APP_VERSION "0.1.0-beta.15"
 !endif
 
 !define APP_NAME "SAP B1 Excel Helper"
@@ -12,6 +13,9 @@ SetCompressor /SOLID lzma
 !define APP_PUBLISHER "Yijie601"
 !define APP_REGISTRY_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\SapB1ExcelHelper"
 !define SOURCE_ROOT ".."
+!ifndef PUBLISH_DIR
+  !define PUBLISH_DIR "${SOURCE_ROOT}\artifacts\publish"
+!endif
 
 Name "${APP_NAME}"
 OutFile "${SOURCE_ROOT}\artifacts\installer\SapB1ExcelHelper-Setup-${APP_VERSION}-win-x64.exe"
@@ -20,7 +24,7 @@ InstallDirRegKey HKCU "${APP_REGISTRY_KEY}" "InstallLocation"
 RequestExecutionLevel user
 BrandingText "SAP B1 Excel Helper"
 
-VIProductVersion "0.1.0.14"
+VIProductVersion "0.1.0.15"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "ProductVersion" "${APP_VERSION}"
 VIAddVersionKey "CompanyName" "${APP_PUBLISHER}"
@@ -51,7 +55,7 @@ Section "SAP B1 Excel Helper (required)" SEC_MAIN
   nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM ${APP_EXE} /F'
 
   SetOutPath "$INSTDIR"
-  File /r /x "*.pdb" "${SOURCE_ROOT}\artifacts\publish\*"
+  File /r /x "*.pdb" "${PUBLISH_DIR}\*"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "${APP_REGISTRY_KEY}" "DisplayName" "${APP_NAME}"
@@ -63,7 +67,9 @@ Section "SAP B1 Excel Helper (required)" SEC_MAIN
   WriteRegStr HKCU "${APP_REGISTRY_KEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
   WriteRegDWORD HKCU "${APP_REGISTRY_KEY}" "NoModify" 1
   WriteRegDWORD HKCU "${APP_REGISTRY_KEY}" "NoRepair" 1
-  WriteRegDWORD HKCU "${APP_REGISTRY_KEY}" "EstimatedSize" 74000
+  ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
+  IfErrors +2
+  WriteRegDWORD HKCU "${APP_REGISTRY_KEY}" "EstimatedSize" $0
 SectionEnd
 
 Section "Start Menu shortcut" SEC_START_MENU

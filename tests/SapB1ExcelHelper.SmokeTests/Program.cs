@@ -2,7 +2,12 @@ using System.Text.Json;
 using SapB1ExcelHelper.Models;
 using SapB1ExcelHelper.Services;
 
-var tests = new (string Name, Action Run)[]
+if (args.Length == 1 && args[0] == NativeClipboardTests.ChildFlag)
+{
+    return NativeClipboardTests.RunIsolatedChild();
+}
+
+var tests = new List<(string Name, Action Run)>
 {
     ("Parses valid multi-row invoice and preserves blank columns", ParsesValidInvoice),
     ("Starts the COL33 item paste at SAP Code instead of Supplier Name", BuildsExpectedCol33ItemBlock),
@@ -18,8 +23,29 @@ var tests = new (string Name, Action Run)[]
     ("Verifies an update installer SHA-256 digest", VerifiesUpdateDigest),
     ("Validates and persists custom global hotkeys", HandlesCustomHotkeys),
     ("Requires every SAP position to be captured explicitly", RequiresCompleteCalibration),
-    ("Uses five ordered paste actions with an 0.8-second guard", UsesStepByStepPasteOrder)
+    ("Uses five ordered paste actions with an 0.8-second guard", UsesStepByStepPasteOrder),
+    ("Handles Excel quoted cells without changing item columns", HandlesQuotedCells),
+    ("Rejects embedded cell separators before sending anything to SAP", RejectsEmbeddedSeparators),
+    ("Formats the SAP date independently of Windows culture", FormatsInvariantDate),
+    ("Recovers from clipboard contention asynchronously", RecoversFromClipboardContention),
+    ("Bounds clipboard retries and supports cancellation", BoundsClipboardRetries),
+    ("Waits for custom-hotkey modifiers to be released asynchronously", WaitsForModifiers),
+    ("Runs five pastes with only one final clipboard restoration", RunsFivePastesWithOneRestore),
+    ("Stops before input when a target is covered", StopsAtCoveredTarget),
+    ("Preserves a new user copy during an active run", PreservesNewUserCopy),
+    ("Rejects a new copy made between validation and run startup", RejectsChangedCopyAtStartup),
+    ("Never replays the item block after a partial input failure", DoesNotReplayItems),
+    ("Cancellation finishes the paste guard and stops before the next field", CancelsBeforeNextField)
 };
+
+if (args.Contains(NativeClipboardTests.IntegrationFlag, StringComparer.Ordinal))
+{
+    tests.Add(("Exercises Win32 clipboard in a private noninteractive window station", NativeClipboardTests.RunInIsolatedProcess));
+}
+else
+{
+    Console.WriteLine(NativeClipboardTests.NotRequestedMessage);
+}
 
 var failures = 0;
 foreach (var test in tests)
@@ -36,7 +62,7 @@ foreach (var test in tests)
     }
 }
 
-Console.WriteLine($"{tests.Length - failures}/{tests.Length} smoke tests passed.");
+Console.WriteLine($"{tests.Count - failures}/{tests.Count} smoke tests passed.");
 return failures == 0 ? 0 : 1;
 
 static void ParsesValidInvoice()
@@ -387,6 +413,167 @@ static void UsesStepByStepPasteOrder()
     Equal("Item No. (entire E:N block)", SapPasteWorkflow.GetLabel(SapPasteWorkflow.Steps[^1]));
     Equal(TimeSpan.FromMilliseconds(800), SapAutomationService.PasteInterval);
 }
+
+static void HandlesQuotedCells()
+{
+    var invoice = new ExcelClipboardParser().Parse(Row("\"Supplier \"\"One\"\"\"", "03-08-2026", "\"REF-1\"", "ITEM-1", "O", "1", "", "0", "V", "", "", "", "W") + "\r\n");
+    Equal("Supplier \"One\"", invoice.SupplierName);
+    Equal("REF-1", invoice.DocumentNumber);
+    Equal("ITEM-1\tO\t1\t\t0\tV\t\t\t\tW", invoice.ItemClipboardBlock);
+}
+
+static void RejectsEmbeddedSeparators()
+{
+    foreach (var value in new[] { "\"ITEM\nSECOND\"", "\"ITEM\tSECOND\"", "ITEM\0SECOND" })
+    {
+        Throws<ClipboardValidationException>(() => new ExcelClipboardParser().Parse(
+            Row("Supplier", "03-08-2026", "REF", value, "O", "1", "", "0", "V", "", "", "", "W")), "inside a cell");
+    }
+    Throws<ClipboardValidationException>(() => new ExcelClipboardParser().Parse("\"incomplete"), "incomplete");
+}
+
+static void FormatsInvariantDate()
+{
+    var previous = System.Globalization.CultureInfo.CurrentCulture;
+    try
+    {
+        System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("th-TH");
+        Equal("03.08.26", ExampleInvoice().SapDate);
+    }
+    finally
+    {
+        System.Globalization.CultureInfo.CurrentCulture = previous;
+    }
+}
+
+static void RecoversFromClipboardContention()
+{
+    var attempts = 0;
+    var notifications = 0;
+    var task = ClipboardRetry.RunAsync(() => (++attempts >= 4, 42), onBusy: () => notifications++);
+    True(!task.IsCompleted, "A busy clipboard retry must yield rather than block the caller.");
+    Equal(42, task.GetAwaiter().GetResult());
+    Equal(4, attempts);
+    Equal(1, notifications);
+}
+
+static void BoundsClipboardRetries()
+{
+    Throws<InvalidOperationException>(() => ClipboardRetry.RunAsync(() => (false, 0), TimeSpan.FromMilliseconds(30)).GetAwaiter().GetResult(), "stayed busy");
+    using var cancellation = new CancellationTokenSource();
+    var task = ClipboardRetry.RunAsync(() => (false, 0), cancellationToken: cancellation.Token);
+    cancellation.Cancel();
+    try
+    {
+        task.GetAwaiter().GetResult();
+        throw new InvalidOperationException("Expected clipboard retry cancellation.");
+    }
+    catch (OperationCanceledException)
+    {
+    }
+}
+
+static void WaitsForModifiers()
+{
+    var checks = 0;
+    var task = InputService.WaitForModifiersReleasedAsync(() => ++checks < 3, CancellationToken.None);
+    True(!task.IsCompleted, "Held shortcut modifiers must yield rather than block the UI.");
+    task.GetAwaiter().GetResult();
+    Equal(3, checks);
+    using var cancellation = new CancellationTokenSource();
+    cancellation.Cancel();
+    try
+    {
+        InputService.WaitForModifiersReleasedAsync(() => true, cancellation.Token).GetAwaiter().GetResult();
+        throw new InvalidOperationException("Expected modifier-wait cancellation.");
+    }
+    catch (OperationCanceledException)
+    {
+    }
+}
+
+static void RunsFivePastesWithOneRestore()
+{
+    var invoice = ExampleInvoice();
+    var io = new FakeSapAutomationIO();
+    var service = new SapAutomationService(io);
+    var result = service.RunAllAsync(invoice, new SapCalibration(), io.ClipboardSequence).GetAwaiter().GetResult();
+    Equal(invoice.Items.Count, result.ItemRows);
+    Equal(6, io.Writes.Count);
+    True(io.Pasted.SequenceEqual(new[] { invoice.SupplierName, invoice.SapDate, invoice.DocumentNumber, invoice.DocumentNumber, invoice.ItemClipboardBlock }),
+        "Supplier or header values entered the wrong action or item block.");
+    Equal(invoice.OriginalClipboardText, io.Writes[^1]);
+    Equal(5, io.Clicks);
+    Equal(4, io.Selections);
+    Equal(5, io.Delays.Count(delay => delay >= TimeSpan.FromMilliseconds(800)));
+}
+
+static void StopsAtCoveredTarget()
+{
+    var io = new FakeSapAutomationIO { TargetCovered = true };
+    Throws<SapAutomationException>(() => new SapAutomationService(io).RunAllAsync(ExampleInvoice(), new SapCalibration(), io.ClipboardSequence).GetAwaiter().GetResult(), "covered");
+    Equal(0, io.Clicks);
+    Equal(0, io.Pasted.Count);
+    Equal(0, io.Writes.Count);
+}
+
+static void PreservesNewUserCopy()
+{
+    var io = new FakeSapAutomationIO();
+    io.AfterPaste = () =>
+    {
+        if (io.Pasted.Count == 2)
+        {
+            io.ExternalCopy("USER NEW COPY");
+        }
+    };
+    Throws<SapAutomationException>(() => new SapAutomationService(io).RunAllAsync(ExampleInvoice(), new SapCalibration(), io.ClipboardSequence).GetAwaiter().GetResult(), "clipboard changed");
+    Equal("USER NEW COPY", io.CurrentText);
+    Equal(2, io.Pasted.Count);
+    Equal(2, io.Writes.Count);
+}
+
+static void RejectsChangedCopyAtStartup()
+{
+    var io = new FakeSapAutomationIO();
+    var validatedSequence = io.ClipboardSequence;
+    io.ExternalCopy("NEW COPY AFTER VALIDATION");
+    Throws<SapAutomationException>(() => new SapAutomationService(io).RunAllAsync(
+        ExampleInvoice(), new SapCalibration(), validatedSequence).GetAwaiter().GetResult(), "clipboard changed");
+    Equal("NEW COPY AFTER VALIDATION", io.CurrentText);
+    Equal(0, io.Writes.Count);
+    Equal(0, io.Pasted.Count);
+}
+
+static void DoesNotReplayItems()
+{
+    var io = new FakeSapAutomationIO { FailAfterPasteNumber = 5 };
+    Throws<SapAutomationException>(() => new SapAutomationService(io).RunAllAsync(ExampleInvoice(), new SapCalibration(), io.ClipboardSequence).GetAwaiter().GetResult(), "partial input");
+    Equal(5, io.Pasted.Count);
+    Equal(1, io.Pasted.Count(value => value == ExampleInvoice().ItemClipboardBlock));
+    True(io.Delays[^1] >= TimeSpan.FromMilliseconds(800), "An uncertain item paste must finish its guard before restoration.");
+}
+
+static void CancelsBeforeNextField()
+{
+    using var cancellation = new CancellationTokenSource();
+    var io = new FakeSapAutomationIO { AfterPaste = cancellation.Cancel };
+    try
+    {
+        new SapAutomationService(io).RunAllAsync(ExampleInvoice(), new SapCalibration(), io.ClipboardSequence, cancellationToken: cancellation.Token).GetAwaiter().GetResult();
+        throw new InvalidOperationException("Expected paste cancellation.");
+    }
+    catch (OperationCanceledException)
+    {
+    }
+    Equal(1, io.Pasted.Count);
+    Equal(2, io.Writes.Count);
+    Equal(ExampleInvoice().OriginalClipboardText, io.CurrentText);
+    Equal(TimeSpan.FromMilliseconds(800), io.Delays[^1]);
+}
+
+static InvoiceClipboardData ExampleInvoice() => new ExcelClipboardParser().Parse(
+    Row("COL33 PTE.LTD", "03-08-2026", "COL26080630_F", "ITEM-1", "O-HW", "15", "", "7.5", "TX7", "", "", "", "S-HW"));
 
 static string Row(params string[] cells)
 {

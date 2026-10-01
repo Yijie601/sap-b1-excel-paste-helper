@@ -28,7 +28,11 @@ public sealed class MainForm : Form
     private InvoiceClipboardData? _preparedInvoice;
     private CalibrationForm? _calibrationForm;
     private string _lastValidationError = "Copy Excel columns B:N first.";
-    private DateTime _ignoreClipboardUntilUtc;
+    private uint _lastClipboardSequence;
+    private int _clipboardValidationRevision;
+    private CancellationTokenSource? _clipboardValidationCancellation;
+    private CancellationTokenSource? _runCancellation;
+    private bool _needsFreshCopy;
     private bool _automationRunning;
     private bool _allowExit;
     private bool _hotkeyRegistered;
@@ -37,7 +41,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        _automationService = new SapAutomationService();
+        _automationService = new SapAutomationService(() => Handle);
         _hotkey = _hotkeySettingsService.Load();
 
         Text = "SAP B1 Excel Helper";
@@ -146,6 +150,7 @@ public sealed class MainForm : Form
         trayMenu.Items.Add("Hotkey Settings...", null, (_, _) => OpenHotkeySettings());
         trayMenu.Items.Add("Check for Updates", null, async (_, _) => await CheckForUpdatesAsync(userInitiated: true));
         trayMenu.Items.Add("Open Log", null, (_, _) => OpenFolder(AppPaths.LogsDirectory));
+        trayMenu.Items.Add("Stop Paste", null, (_, _) => _runCancellation?.Cancel());
         trayMenu.Items.Add("Open Data Folder", null, (_, _) => OpenFolder(AppPaths.DataDirectory));
         trayMenu.Items.Add(new ToolStripSeparator());
         trayMenu.Items.Add("Exit", null, (_, _) => ExitApplication());
@@ -171,7 +176,7 @@ public sealed class MainForm : Form
         Shown += async (_, _) =>
         {
             await Task.Delay(100);
-            ValidateCurrentClipboard();
+            await ValidateCurrentClipboardAsync();
             await CheckForUpdatesAsync(userInitiated: false);
         };
     }
@@ -206,9 +211,8 @@ public sealed class MainForm : Form
         {
             _ = RunAutomationAsync();
         }
-        else if (message.Msg == NativeMethods.WmClipboardUpdate &&
-                 DateTime.UtcNow >= _ignoreClipboardUntilUtc &&
-                 !_automationRunning)
+        else if (message.Msg == NativeMethods.WmClipboardUpdate && !_automationRunning &&
+                 ClipboardService.Sequence != _lastClipboardSequence)
         {
             _ = ValidateClipboardAfterDelayAsync();
         }
@@ -228,35 +232,92 @@ public sealed class MainForm : Form
 
     private async Task ValidateClipboardAfterDelayAsync()
     {
-        await Task.Delay(45);
-        ValidateCurrentClipboard();
+        _clipboardValidationCancellation?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        _clipboardValidationCancellation = cancellation;
+        var revision = ++_clipboardValidationRevision;
+        try
+        {
+            await Task.Delay(60, cancellation.Token);
+            if (_automationRunning || IsDisposed || revision != _clipboardValidationRevision)
+            {
+                return;
+            }
+
+            await ValidateCurrentClipboardAsync(cancellation.Token, revision: revision);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(_clipboardValidationCancellation, cancellation))
+            {
+                _clipboardValidationCancellation = null;
+            }
+
+            cancellation.Dispose();
+        }
     }
 
-    private bool ValidateCurrentClipboard()
+    private async Task<bool> ValidateCurrentClipboardAsync(
+        CancellationToken cancellationToken = default,
+        bool duringRun = false,
+        int? revision = null)
     {
-        var text = ClipboardService.TryGetText();
-        if (text is null)
-        {
-            SetNotReady("Clipboard does not contain Excel text.");
-            return false;
-        }
+        bool IsCurrentRequest() => !IsDisposed && !Disposing && !cancellationToken.IsCancellationRequested &&
+            (duringRun || !_automationRunning) &&
+            (revision is null || revision == _clipboardValidationRevision);
 
         try
         {
-            var invoice = _parser.Parse(text);
+            var clipboard = await ClipboardService.ReadTextAsync(cancellationToken);
+            if (!IsCurrentRequest())
+            {
+                return false;
+            }
+
+            if (clipboard.Sequence != ClipboardService.Sequence)
+            {
+                if (!duringRun)
+                {
+                    _ = ValidateClipboardAfterDelayAsync();
+                }
+                return false;
+            }
+
+            if (clipboard.Text is null)
+            {
+                SetNotReady("Clipboard does not contain Excel text.");
+                return false;
+            }
+
+            var invoice = _parser.Parse(clipboard.Text);
             _preparedInvoice = invoice;
+            _lastClipboardSequence = clipboard.Sequence;
+            _needsFreshCopy = false;
             _lastValidationError = string.Empty;
             SetReady(invoice);
             return true;
         }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
         catch (ClipboardValidationException exception)
         {
-            SetNotReady(exception.Message);
+            if (IsCurrentRequest())
+            {
+                SetNotReady(exception.Message);
+            }
             return false;
         }
         catch (Exception exception)
         {
-            SetNotReady($"Unable to read clipboard: {exception.Message}");
+            if (IsCurrentRequest())
+            {
+                SetNotReady($"Unable to read clipboard: {exception.Message}");
+            }
             return false;
         }
     }
@@ -276,74 +337,122 @@ public sealed class MainForm : Form
             return;
         }
 
-        var currentText = ClipboardService.TryGetText();
-        if (_preparedInvoice is null ||
-            currentText is null ||
-            !string.Equals(currentText, _preparedInvoice.OriginalClipboardText, StringComparison.Ordinal))
-        {
-            ValidateCurrentClipboard();
-        }
-
-        if (_preparedInvoice is null)
-        {
-            ShowError(_lastValidationError);
-            return;
-        }
-
-        var calibration = _calibrationService.Load();
-        if (!calibration.IsComplete)
-        {
-            var missing = string.Join(", ", calibration.MissingFields);
-            ShowError($"Calibration is incomplete. Capture these SAP positions first:\r\n\r\n{missing}");
-            OpenCalibration();
-            return;
-        }
-
-        var invoice = _preparedInvoice;
+        _clipboardValidationCancellation?.Cancel();
+        ++_clipboardValidationRevision;
         _automationRunning = true;
         _runButton.Enabled = false;
-        _ignoreClipboardUntilUtc = DateTime.UtcNow.AddSeconds(6);
-        SetWorking("Starting five-step SAP paste...");
+        _trayRunItem.Enabled = false;
+        using var cancellation = new CancellationTokenSource();
+        _runCancellation = cancellation;
+        InvoiceClipboardData? invoice = null;
+        var runStarted = false;
         var started = Stopwatch.StartNew();
 
         try
         {
-            if (ContainsFocus)
+            if (_preparedInvoice is null || ClipboardService.Sequence != _lastClipboardSequence)
             {
-                MinimizeToTray();
-                await Task.Delay(250);
+                if (!await ValidateCurrentClipboardAsync(cancellation.Token, duringRun: true))
+                {
+                    if (!cancellation.IsCancellationRequested && !IsDisposed && !Disposing)
+                    {
+                        ShowError(string.IsNullOrEmpty(_lastValidationError)
+                            ? "The clipboard changed during validation. Copy Excel B:N again."
+                            : _lastValidationError);
+                    }
+                    return;
+                }
             }
 
+            if (_needsFreshCopy)
+            {
+                MessageBox.Show("This copy was already used. Check SAP, then copy Excel B:N again for the next run.",
+                    "Check SAP first", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var calibration = _calibrationService.Load();
+            if (!calibration.IsComplete)
+            {
+                ShowError($"Capture these SAP positions in Calibration first:\r\n\r\n{string.Join(", ", calibration.MissingFields)}");
+                return;
+            }
+
+            invoice = _preparedInvoice!;
+            SetWorking("Starting five-step SAP paste...");
+            if (Visible)
+            {
+                MinimizeToTray();
+                await Task.Delay(250, cancellation.Token);
+            }
+
+            runStarted = true;
+            _needsFreshCopy = true;
             var result = await _automationService.RunAllAsync(
                 invoice,
                 calibration,
-                message => SetWorking(message));
+                _lastClipboardSequence,
+                new Progress<string>(message =>
+                {
+                    if (_automationRunning && !IsDisposed && !Disposing)
+                    {
+                        SetWorking(message);
+                    }
+                }),
+                cancellation.Token);
 
             AppLogger.Success(
                 invoice.SupplierName,
                 invoice.DocumentNumber,
                 result.ItemRows,
                 result.Duration);
-            SetReady(invoice, $"All 5 steps completed in {result.Duration.TotalSeconds:0.00}s — check SAP before Add.");
+            if (IsDisposed || Disposing)
+            {
+                return;
+            }
+            SetReady(invoice, $"Pasted in {result.Duration.TotalSeconds:0.00}s — check SAP; copy B:N again for the next run.");
             ShowSuccess(invoice, result);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!IsDisposed && !Disposing)
+            {
+                SetNotReady("Paste stopped. Check SAP before copying B:N again.", keepInvoice: true);
+            }
         }
         catch (Exception exception)
         {
             started.Stop();
             AppLogger.Failure(
-                invoice.SupplierName,
-                invoice.DocumentNumber,
-                invoice.Items.Count,
+                invoice?.SupplierName,
+                invoice?.DocumentNumber,
+                invoice?.Items.Count ?? 0,
                 started.Elapsed,
                 exception.Message);
-            SetNotReady($"Stopped: {exception.Message}", keepInvoice: true);
-            ShowError(exception.Message);
+            if (!IsDisposed && !Disposing)
+            {
+                SetNotReady($"Stopped: {exception.Message}", keepInvoice: true);
+                ShowError(exception.Message);
+            }
         }
         finally
         {
+            if (runStarted)
+            {
+                _lastClipboardSequence = _automationService.LastClipboardSequence;
+            }
+
+            _runCancellation = null;
             _automationRunning = false;
-            _runButton.Enabled = true;
-            _ignoreClipboardUntilUtc = DateTime.UtcNow.AddSeconds(2);
+            if (!IsDisposed)
+            {
+                _runButton.Enabled = true;
+                _trayRunItem.Enabled = true;
+                if (ClipboardService.Sequence != _lastClipboardSequence)
+                {
+                    _ = ValidateClipboardAfterDelayAsync();
+                }
+            }
         }
     }
 
@@ -358,11 +467,10 @@ public sealed class MainForm : Form
         {
             if (userInitiated)
             {
-                MessageBox.Show(
-                    "Wait for the current SAP paste to finish before checking for updates.",
+                _trayIcon.ShowBalloonTip(1800,
                     "Update check",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                    "Wait for the current SAP paste to finish before checking for updates.",
+                    ToolTipIcon.Info);
             }
 
             return;
@@ -381,6 +489,11 @@ public sealed class MainForm : Form
         {
             checkAttempted = true;
             var update = await _updateService.CheckForUpdateAsync();
+            if (_automationRunning || IsDisposed || Disposing)
+            {
+                checkAttempted = false;
+                return;
+            }
             if (update is null)
             {
                 if (userInitiated)
@@ -392,12 +505,6 @@ public sealed class MainForm : Form
                         MessageBoxIcon.Information);
                 }
 
-                return;
-            }
-
-            if (_automationRunning)
-            {
-                checkAttempted = false;
                 return;
             }
 
@@ -446,7 +553,7 @@ public sealed class MainForm : Form
         catch (Exception exception)
         {
             AppLogger.Error("UPDATE_CHECK_ERROR", exception.Message, exception);
-            if (userInitiated)
+            if (userInitiated && !_automationRunning && !IsDisposed && !Disposing)
             {
                 MessageBox.Show(
                     $"Unable to check for updates.\r\n\r\n{exception.Message}",
@@ -520,6 +627,11 @@ public sealed class MainForm : Form
 
     private void OpenCalibration()
     {
+        if (_automationRunning)
+        {
+            return;
+        }
+
         if (_calibrationForm is { IsDisposed: false })
         {
             _calibrationForm.Show();
@@ -543,11 +655,10 @@ public sealed class MainForm : Form
     {
         if (_automationRunning)
         {
-            MessageBox.Show(
-                "Wait for the current SAP paste to finish before changing the hotkey.",
+            _trayIcon.ShowBalloonTip(1800,
                 "Hotkey settings",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                "Wait for the current SAP paste to finish before changing the hotkey.",
+                ToolTipIcon.Info);
             return;
         }
 
@@ -641,6 +752,11 @@ public sealed class MainForm : Form
 
     private void RestoreFromTray()
     {
+        if (_automationRunning)
+        {
+            return;
+        }
+
         ShowInTaskbar = true;
         Show();
         WindowState = FormWindowState.Normal;
@@ -649,6 +765,12 @@ public sealed class MainForm : Form
 
     private void ExitApplication()
     {
+        if (_automationRunning)
+        {
+            _runCancellation?.Cancel();
+            return;
+        }
+
         _allowExit = true;
         _trayIcon.Visible = false;
         Close();
@@ -656,12 +778,15 @@ public sealed class MainForm : Form
 
     private void OnFormClosing(object? sender, FormClosingEventArgs eventArgs)
     {
+        _clipboardValidationCancellation?.Cancel();
         if (!_allowExit && eventArgs.CloseReason == CloseReason.UserClosing)
         {
             eventArgs.Cancel = true;
             MinimizeToTray();
             return;
         }
+
+        _runCancellation?.Cancel();
 
         if (_calibrationForm is { IsDisposed: false })
         {

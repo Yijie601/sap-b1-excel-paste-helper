@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using SapB1ExcelHelper.Models;
 
 namespace SapB1ExcelHelper.Services;
@@ -27,20 +28,7 @@ public sealed class ExcelClipboardParser
             throw new ClipboardValidationException("Clipboard is empty. Copy Excel columns B:N first.");
         }
 
-        var normalized = clipboardText.Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
-        var lines = normalized.Split('\n').ToList();
-        while (lines.Count > 0 && lines[^1].Length == 0)
-        {
-            lines.RemoveAt(lines.Count - 1);
-        }
-
-        if (lines.Count == 0)
-        {
-            throw new ClipboardValidationException("Clipboard is empty. Copy Excel columns B:N first.");
-        }
-
-        var rows = lines.Select(line => line.Split('\t')).ToList();
+        var rows = ReadRows(clipboardText);
         if (LooksLikeHeader(rows[0]))
         {
             throw new ClipboardValidationException("Excel header detected. Please copy data rows only.");
@@ -49,6 +37,14 @@ public sealed class ExcelClipboardParser
         if (rows.Any(row => row.Length != 13))
         {
             throw new ClipboardValidationException("Invalid Excel selection. Please copy exactly columns B:N (13 columns).");
+        }
+
+        for (var index = 0; index < rows.Count; index++)
+        {
+            if (rows[index].Any(cell => cell.AsSpan().IndexOfAny('\t', '\r', '\n') >= 0 || cell.Contains('\0')))
+            {
+                throw new ClipboardValidationException($"Excel row {index + 1} contains a line break or tab inside a cell. Remove it before pasting into SAP.");
+            }
         }
 
         var supplier = rows[0][0].Trim();
@@ -102,6 +98,90 @@ public sealed class ExcelClipboardParser
             Items = items,
             OriginalClipboardText = clipboardText
         };
+    }
+
+    private static List<string[]> ReadRows(string text)
+    {
+        var rows = new List<string[]>();
+        var cells = new List<string>(13);
+        var cell = new StringBuilder();
+        var quoted = false;
+        var quoteClosed = false;
+        for (var index = 0; index < text.Length; index++)
+        {
+            var character = text[index];
+            if (quoted)
+            {
+                if (character == '"')
+                {
+                    if (index + 1 < text.Length && text[index + 1] == '"')
+                    {
+                        cell.Append('"');
+                        index++;
+                    }
+                    else
+                    {
+                        quoted = false;
+                        quoteClosed = true;
+                    }
+                }
+                else
+                {
+                    cell.Append(character);
+                }
+                continue;
+            }
+
+            if (character == '"' && cell.Length == 0 && !quoteClosed)
+            {
+                quoted = true;
+            }
+            else if (character is '\t' or '\r' or '\n')
+            {
+                cells.Add(cell.ToString());
+                cell.Clear();
+                quoteClosed = false;
+                if (character != '\t')
+                {
+                    rows.Add(cells.ToArray());
+                    cells.Clear();
+                    if (character == '\r' && index + 1 < text.Length && text[index + 1] == '\n')
+                    {
+                        index++;
+                    }
+                }
+            }
+            else
+            {
+                if (quoteClosed)
+                {
+                    throw new ClipboardValidationException("Malformed Excel text after a quoted cell. Copy B:N again.");
+                }
+                cell.Append(character);
+            }
+        }
+
+        if (quoted)
+        {
+            throw new ClipboardValidationException("An Excel quoted cell is incomplete. Copy B:N again.");
+        }
+
+        if (cell.Length > 0 || cells.Count > 0 || quoteClosed)
+        {
+            cells.Add(cell.ToString());
+            rows.Add(cells.ToArray());
+        }
+
+        while (rows.Count > 0 && rows[^1].Length == 1 && rows[^1][0].Length == 0)
+        {
+            rows.RemoveAt(rows.Count - 1);
+        }
+
+        if (rows.Count == 0)
+        {
+            throw new ClipboardValidationException("Clipboard is empty. Copy Excel columns B:N first.");
+        }
+        return rows;
     }
 
     private static DateTime ParseDate(string rawValue)

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0-beta.15
+
+- Replaced synchronous clipboard sleeps with bounded asynchronous retries (up to eight seconds); native reads/writes run off the UI thread, with one shared pending read for delayed Excel rendering.
+- Uses Win32 Unicode text directly and restores B:N only once at the end, reducing successful-run clipboard writes from ten to six.
+- Preserves the validated clipboard sequence through startup and every step; new user copies are never deliberately overwritten during restoration.
+- Stops on foreground/root-window changes, top-level overlays, off-monitor coordinates, or target movement during a run. This is not SAP field recognition.
+- Ignores stale clipboard-validation results/failures and requires a fresh Excel copy after any started attempt, preventing repeated F8 from replaying Items.
+- Added tray cancellation and prevented Calibration/main-window activation during automation. Even uncertain partial input finishes its payload guard before clipboard restoration.
+- Waits asynchronously for custom-hotkey modifier release; held Ctrl/Alt/Shift/Windows keys stop shortcut injection instead of altering Ctrl+V.
+- Added quoted-TSV parsing, separator rejection, invariant SAP dates, and explicit PerMonitorV2 DPI awareness.
+- Expanded automated regression coverage for contention, mapping, fifty-row invoices, cancellation, changing copies, and uncertain partial input. Company-PC SAP acceptance still requires manual verification.
+- Excluded debug symbols from portable packages and measured installer size from its actual payload. Retained self-contained ReadyToRun publishing after the size/speed trade-off audit.
+
 ## 0.1.0-beta.14
 
 - Changed the runtime back to a single F8 operation while retaining five separately targeted paste actions.

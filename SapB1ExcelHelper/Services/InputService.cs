@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace SapB1ExcelHelper.Services;
 
 internal static class InputService
@@ -16,26 +18,70 @@ internal static class InputService
             throw new InvalidOperationException("Unable to move the mouse to the calibrated SAP field.");
         }
 
-        NativeMethods.EnsureInputSent(new[]
+        try
         {
-            Mouse(MouseLeftDown),
-            Mouse(MouseLeftUp)
-        });
+            NativeMethods.EnsureInputSent(new[] { Mouse(MouseLeftDown), Mouse(MouseLeftUp) });
+        }
+        catch
+        {
+            _ = NativeMethods.SendInput(1, new[] { Mouse(MouseLeftUp) },
+                System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.Input>());
+            throw;
+        }
     }
 
     internal static void SelectAll() => SendShortcut(0x41);
 
     internal static void Paste() => SendShortcut(0x56);
 
+    internal static Task WaitForModifiersReleasedAsync(CancellationToken cancellationToken) =>
+        WaitForModifiersReleasedAsync(ModifiersPressed, cancellationToken);
+
+    internal static async Task WaitForModifiersReleasedAsync(Func<bool> modifiersPressed, CancellationToken cancellationToken)
+    {
+        var timer = Stopwatch.StartNew();
+        while (modifiersPressed())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (timer.Elapsed >= TimeSpan.FromSeconds(3))
+            {
+                throw new SapAutomationException("Release Ctrl, Alt, Shift and Windows keys before running the paste.");
+            }
+            await Task.Delay(25, cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+    }
+
+    private static bool ModifiersPressed() => NativeMethods.GetAsyncKeyState(0x10) < 0 ||
+        NativeMethods.GetAsyncKeyState(VkControl) < 0 || NativeMethods.GetAsyncKeyState(0x12) < 0 ||
+        NativeMethods.GetAsyncKeyState(0x5B) < 0 || NativeMethods.GetAsyncKeyState(0x5C) < 0;
+
     private static void SendShortcut(ushort key)
     {
-        NativeMethods.EnsureInputSent(new[]
+        if (ModifiersPressed())
+        {
+            throw new SapAutomationException("A modifier key is held down. Check SAP before starting another run.");
+        }
+
+        var inputs = new[]
         {
             Key(VkControl, false),
             Key(key, false),
             Key(key, true),
             Key(VkControl, true)
-        });
+        };
+        try
+        {
+            NativeMethods.EnsureInputSent(inputs);
+        }
+        catch
+        {
+            // A partial SendInput may leave our Ctrl/key down. Release only
+            // those two keys, without replaying the shortcut or its paste.
+            _ = NativeMethods.SendInput(2, new[] { Key(key, true), Key(VkControl, true) },
+                System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.Input>());
+            throw;
+        }
     }
 
     private static NativeMethods.Input Mouse(uint flags) => new()

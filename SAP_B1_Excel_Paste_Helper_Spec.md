@@ -202,59 +202,11 @@ Date:          13-08-2026
 Document No:   260813/162
 ```
 
-## 7. Supplier Mapping
+## 7. Supplier 直接粘贴
 
-Excel 只有 Supplier Name，但 SAP 要 BP / Supplier Code。
-
-例如：
-
-```text
-LIM SOON POH TRADING → VL1002
-```
-
-程序需要 Supplier Mapping。
-
-第一版可以使用：
-
-```text
-supplier_mapping.csv
-```
-
-例如：
-
-```csv
-Supplier Name,SAP Code
-LIM SOON POH TRADING,VL1002
-```
-
-规则：
-
-- Trim whitespace
-- Ignore case
-- 不做 fuzzy match
-- 不使用 AI 猜 Supplier
-- 找不到时直接停止
-
-错误：
-
-```text
-Supplier mapping not found:
-XXXXX
-```
-
-后续软件 UI 可增加：
-
-```text
-Supplier Mapping Manager
-```
-
-支持：
-
-- 新增
-- 编辑
-- 删除
-- 搜索 Supplier
-- Import / Export CSV
+不需要 Supplier Mapping。第一行 Excel B 的 Supplier Name 直接粘贴到用户校准的
+SAP Supplier/Name 输入位置。名称必须由目标 SAP 接受；程序不猜测 BP Code，
+也不执行 fuzzy match。旧 supplier_mapping.csv 保留但不再使用。
 
 ## 8. Date Conversion
 
@@ -702,6 +654,10 @@ A/P Invoice 放在校准时相同的屏幕、位置与大小，再按 F8。
 
 如果 SAP 不在预期位置，用户应停止操作并重新校准；Helper 不会猜测或切换窗口。
 
+Beta 15 增加轻量 Win32 root-window/foreground 检查：五个点必须在同一顶层窗口，
+且运行中窗口不能移动、失去焦点或被其他顶层窗口遮挡。这不是 SAP 身份或字段识别，
+不能保证发现同一窗口内的弹窗，也不能判断字段内容是否已被 SAP 接受。
+
 不要自己：
 
 ```text
@@ -719,8 +675,8 @@ Search Excel then switch SAP
 4. 点击 Supplier Ref.，粘贴第一行 D，然后异步等待 0.8 秒
 5. 点击 Remarks，粘贴第一行 D，然后异步等待 0.8 秒
 6. 点击 First Item No.，一次粘贴所有已复制行的 E:N block
-7. 每个动作都把原始 B:N 恢复为 plain text；不恢复可能阻塞 UI 的完整 Excel OLE formats
-8. Items 完成后停止
+7. Items paste 后按行数异步等待 0.8–5 秒，之后只恢复一次原始 B:N plain text
+8. 完成或中断后停止；检查 SAP 并重新 Ctrl+C 才能开始下一次，不能连续 F8 重复同一份数据
 ```
 
 绝对不要：
@@ -749,7 +705,8 @@ RegisterHotKey
 Clipboard：
 
 ```text
-System.Windows.Forms.Clipboard
+Win32 Unicode text (CF_UNICODETEXT)
+OpenClipboard / GetClipboardData / SetClipboardData
 ```
 
 不建议把：
@@ -766,33 +723,13 @@ Prototype 可以使用，但 production 建议使用 Win32 SendInput。
 
 正式 EXE 必须明显比 PowerShell Prototype 快。
 
-主要原则：
+公司电脑兼容性优先，不使用阻塞 UI 的 Thread.Sleep。每个 header paste 保留
+0.8 秒异步 guard；点击后预留短暂 focus settle。Clipboard 忙碌时异步重试最多
+8 秒，只重试准备数据，不重试已经发出的 Ctrl+V。Excel delayed rendering 的读取
+放在后台，最多共享一个尚未完成的读取任务，避免堆积线程。
 
-```text
-不要每个 field 固定 Sleep 300–1000ms
-```
-
-普通 field：
-
-```text
-Posting Date
-Remarks
-```
-
-应该：
-
-```text
-Click
-20–50 ms
-Paste/Input
-继续
-```
-
-目标每个普通 field：
-
-```text
-约 30–100 ms
-```
+一套流程仅 5 次准备 payload + 1 次结束恢复（旧版为 10 次 Clipboard 写入）。
+保留 self-contained 和 ReadyToRun；不以牺牲公司电脑启动兼容性换取小幅包体减少。
 
 ## 22. Supplier 等待策略
 
@@ -914,6 +851,10 @@ original B:N clipboard
 
 即使错误发生，也尽可能 restore。
 
+只恢复 B:N plain text，不恢复完整 OLE formats。仅当 Clipboard sequence 仍对应
+Helper 最后一次写入时才恢复；若用户在运行中复制新内容，则停止并保留新内容。
+已经发送或可能部分发送的 paste 必须先完成 payload guard，再尝试恢复。
+
 ## 26. Safety
 
 ### Multiple Invoice
@@ -930,13 +871,9 @@ Supplier / Date / Document No.
 STOP
 ```
 
-### Unknown Supplier
+### Supplier Acceptance
 
-```text
-STOP
-```
-
-不要猜。
+不查询 supplier mapping、不猜名称；是否被 SAP 接受由用户检查。
 
 ### SAP Not Foreground
 
@@ -944,15 +881,13 @@ STOP
 STOP
 ```
 
-### AP Invoice Not Found
+### Correct AP Invoice
 
-```text
-STOP
-```
+用户必须自己打开并激活正确 AP Invoice。顶层窗口检查不能识别业务表单或字段。
 
 ### Wrong Column Count
 
-如果不是至少：
+如果不是恰好：
 
 ```text
 13 columns
@@ -1008,13 +943,8 @@ Status
 Hotkey
 F8
 
-SAP
-Detected / Not detected
-
-Supplier mappings
-136
-
-[Supplier Mapping]
+[Run Now]
+[Hotkey Settings]
 [Calibration]
 [Settings]
 [View Log]
@@ -1038,10 +968,10 @@ SAP Helper
 ```text
 Ready
 Run Now
-Supplier Mapping
 Calibration
 Settings
 Open Log
+Stop Paste
 Exit
 ```
 
@@ -1219,11 +1149,9 @@ public class SapCalibration
 
 ```text
 Calibration UI
-Supplier Mapping UI
 Editable Hotkeys
 Start with Windows
 Test Calibration
-Import / Export Mapping
 Better SAP ready detection
 Performance telemetry
 Optional operation history

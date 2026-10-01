@@ -49,7 +49,10 @@ jobs:
             --self-contained true `
             -p:Version=$env:APP_VERSION `
             -o .\artifacts\publish
-          Compress-Archive -Path .\artifacts\publish\* `
+          $portableFiles = @(Get-ChildItem .\artifacts\publish -File |
+            Where-Object { $_.Extension -ne '.pdb' } |
+            Select-Object -ExpandProperty FullName)
+          Compress-Archive -Path $portableFiles `
             -DestinationPath ".\artifacts\SapB1ExcelHelper-$env:APP_VERSION-win-x64.zip" `
             -Force
 

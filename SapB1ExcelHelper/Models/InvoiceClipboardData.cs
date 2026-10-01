@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace SapB1ExcelHelper.Models;
 
 public sealed class InvoiceClipboardData
@@ -9,6 +11,6 @@ public sealed class InvoiceClipboardData
     public string OriginalClipboardText { get; init; } = string.Empty;
 
     public string SapSupplierValue => SupplierName;
-    public string SapDate => DocumentDate.ToString("dd.MM.yy");
+    public string SapDate => DocumentDate.ToString("dd.MM.yy", CultureInfo.InvariantCulture);
     public string ItemClipboardBlock => string.Join("\r\n", Items.Select(item => item.ToClipboardRow()));
 }

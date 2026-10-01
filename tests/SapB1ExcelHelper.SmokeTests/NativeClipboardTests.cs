@@ -172,8 +172,10 @@ internal static class NativeClipboardTests
                 "Rejected conditional write mutated the private clipboard.");
 
             TestContention(window, privateDesktop, stationName, desktopName, replacementSequence);
+            TestSameOwnerPayloadChange(window, stationName, desktopName, "EXPECTED 🥟 altered");
+            TestSameOwnerPayloadChange(window, stationName, desktopName, "REPLACED 🥟");
             VerifyIsolation(stationName, desktopName);
-            Console.WriteLine("NATIVE_CLIPBOARD_ISOLATED_PASS Unicode TSV, conditional sequence, and contention retry; user clipboard untouched.");
+            Console.WriteLine("NATIVE_CLIPBOARD_ISOLATED_PASS Unicode TSV, conditional sequence, contention retry, and same-owner payload rejection; user clipboard untouched.");
             return 0;
         }
         catch (Exception exception)
@@ -271,6 +273,61 @@ internal static class NativeClipboardTests
         {
             throw new InvalidOperationException("Private clipboard-contention thread failed.", blockerError);
         }
+    }
+
+    private static void TestSameOwnerPayloadChange(nint window, string stationName, string desktopName, string mutated)
+    {
+        VerifyIsolation(stationName, desktopName);
+        var isolationGuard = ClipboardService.BeforeNativeAccess ??
+            throw new InvalidOperationException("The private native-access guard is required for the same-owner test.");
+        var accesses = 0;
+        var mutations = 0;
+        uint mutatedSequence = 0;
+        const string expected = "EXPECTED 🥟";
+        // Test both an extended expected prefix and a same-length replacement,
+        // requiring exact payload content and its terminating NUL.
+        ClipboardService.BeforeNativeAccess = () =>
+        {
+            isolationGuard();
+            if (Interlocked.Increment(ref accesses) == 2)
+            {
+                // With expectedSequence omitted, the first native access is
+                // the outer write; this second access occurs after its close,
+                // just before the ownership checkpoint opens the clipboard.
+                // Recursive accesses still verify isolation but never mutate
+                // again. The owning main thread pumps its private HWND while
+                // this worker waits for the one competing native write.
+                mutatedSequence = ClipboardService.SetTextAsync(mutated, window)
+                    .GetAwaiter().GetResult();
+                Interlocked.Increment(ref mutations);
+            }
+        };
+
+        var rejected = false;
+        try
+        {
+            try
+            {
+                WaitWithOwnerMessagePump(ClipboardService.SetTextAsync(expected, window));
+            }
+            catch (ClipboardChangedException)
+            {
+                rejected = true;
+            }
+        }
+        finally
+        {
+            // Preserve the original private-desktop guard for all subsequent
+            // native operations and any outstanding child-process worker.
+            ClipboardService.BeforeNativeAccess = isolationGuard;
+        }
+
+        Require(mutations == 1, "Same-owner payload test did not inject exactly one competing private write.");
+        Require(rejected, "The ownership checkpoint accepted a changed payload with the same owner HWND.");
+        VerifyIsolation(stationName, desktopName);
+        var remaining = WaitWithOwnerMessagePump(ClipboardService.ReadTextAsync());
+        Require(remaining.Text == mutated && remaining.Sequence == mutatedSequence,
+            "Rejecting a same-owner payload change overwrote the competing private copy or changed its sequence.");
     }
 
     private static void VerifyIsolation(string stationName, string desktopName)

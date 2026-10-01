@@ -85,7 +85,7 @@ public static class ClipboardService
             // Finish this ownership checkpoint even if cancellation follows
             // the write, so the caller can safely restore its original text.
             return await ClipboardRetry.RunAsync(
-                () => TryGetOwnedSequence(ownerWindow), onBusy: NotifyBusy);
+                () => TryGetOwnedSequence(ownerWindow, value), onBusy: NotifyBusy);
         }, cancellationToken);
 
     private static (bool Success, ClipboardText Value) TryReadText()
@@ -200,7 +200,7 @@ public static class ClipboardService
         }
     }
 
-    private static (bool Success, uint Value) TryGetOwnedSequence(nint ownerWindow)
+    private static (bool Success, uint Value) TryGetOwnedSequence(nint ownerWindow, string expectedText)
     {
         BeforeNativeAccess?.Invoke();
         if (!NativeMethods.OpenClipboard(ownerWindow))
@@ -213,6 +213,32 @@ public static class ClipboardService
             if (NativeMethods.GetClipboardOwner() != ownerWindow)
             {
                 throw new ClipboardChangedException();
+            }
+
+            // A clipboard manager may replace data without EmptyClipboard,
+            // retaining our owner HWND. Verify the actual Unicode payload too.
+            var memory = NativeMethods.GetClipboardData(UnicodeText);
+            var requiredBytes = checked(((nuint)expectedText.Length + 1) * 2);
+            if (memory == 0 || NativeMethods.GlobalSize(memory) < requiredBytes)
+            {
+                throw new ClipboardChangedException();
+            }
+            var pointer = NativeMethods.GlobalLock(memory);
+            if (pointer == 0)
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to verify prepared clipboard text.");
+            }
+            try
+            {
+                if (Marshal.ReadInt16(pointer, checked(expectedText.Length * 2)) != 0 ||
+                    !string.Equals(Marshal.PtrToStringUni(pointer, expectedText.Length), expectedText, StringComparison.Ordinal))
+                {
+                    throw new ClipboardChangedException();
+                }
+            }
+            finally
+            {
+                _ = NativeMethods.GlobalUnlock(memory);
             }
             return (true, Sequence);
         }

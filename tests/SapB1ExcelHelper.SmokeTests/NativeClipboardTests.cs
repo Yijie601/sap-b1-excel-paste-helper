@@ -121,13 +121,35 @@ internal static class NativeClipboardTests
             RequireNative(window != 0, "Cannot create a hidden clipboard-owner HWND.");
             VerifyIsolation(stationName, desktopName);
 
+            var workersAttached = 0;
+            // The runtime may have created default-desktop pool threads before
+            // this child changed its process station. Verify/attach every
+            // actual native-access thread before any clipboard call. Leave
+            // the hook installed until this disposable child exits, including
+            // on failure, so a delayed read cannot escape the isolation guard.
+            ClipboardService.BeforeNativeAccess = () =>
+            {
+                Require(GetObjectName(Native.GetProcessWindowStation()) == stationName,
+                    "A native clipboard worker is outside the private process station; access refused.");
+                if (GetObjectName(Native.GetThreadDesktop(Native.GetCurrentThreadId())) != desktopName)
+                {
+                    RequireNative(Native.SetThreadDesktop(privateDesktop),
+                        "Cannot attach the native clipboard worker to the private desktop; access refused.");
+                    Interlocked.Increment(ref workersAttached);
+                }
+                VerifyIsolation(stationName, desktopName);
+            };
+
             const string sample = "供应商 Café 🥟\t03-10-2026\t单据-01\tITEM-1\tO-HW\t15\t\t7.5\tTX7\t\t\t\tS-HW\r\n" +
                                   "供应商 Café 🥟\t03-10-2026\t单据-01\tITEM-2\tO-HW\t3\t\t0\tTX7\t\t\t\tS-HW\r\n";
             var firstSequence = WaitWithOwnerMessagePump(ClipboardService.SetTextAsync(sample, window,
                 expectedSequence: ClipboardService.Sequence));
             var roundtrip = WaitWithOwnerMessagePump(ClipboardService.ReadTextAsync());
-            Require(roundtrip.Text == sample && roundtrip.Sequence == firstSequence,
-                "Native Unicode TSV roundtrip changed text or sequence.");
+            var currentSequence = ClipboardService.Sequence;
+            Require(roundtrip.Text == sample,
+                $"Native Unicode TSV text mismatch: expected UTF-16 length {sample.Length}, actual length {roundtrip.Text?.Length.ToString() ?? "null"}; write sequence {firstSequence}, read sequence {roundtrip.Sequence}, current sequence {currentSequence}; private workers attached {workersAttached}. No clipboard contents logged.");
+            Require(roundtrip.Sequence == firstSequence,
+                $"Native clipboard sequence mismatch after exact text roundtrip: write sequence {firstSequence}, read sequence {roundtrip.Sequence}, current sequence {currentSequence}; private workers attached {workersAttached}.");
 
             VerifyIsolation(stationName, desktopName);
             const string replacement = "替换内容 — exact Unicode";

@@ -15,7 +15,18 @@ public static class ClipboardService
     private static readonly object ReadSync = new();
     private static Task<ClipboardText>? _pendingRead;
 
-    public static uint Sequence => NativeMethods.GetClipboardSequenceNumber();
+    // Used only by the isolated native test child to bind worker threads to
+    // its private desktop. Normal application execution leaves this null.
+    internal static Action? BeforeNativeAccess { get; set; }
+
+    public static uint Sequence
+    {
+        get
+        {
+            BeforeNativeAccess?.Invoke();
+            return NativeMethods.GetClipboardSequenceNumber();
+        }
+    }
 
     public static async Task<ClipboardText> ReadTextAsync(CancellationToken cancellationToken = default)
     {
@@ -57,6 +68,7 @@ public static class ClipboardService
 
     private static (bool Success, ClipboardText Value) TryReadText()
     {
+        BeforeNativeAccess?.Invoke();
         if (!NativeMethods.OpenClipboard(0))
         {
             return (false, new ClipboardText(null, 0));
@@ -111,6 +123,7 @@ public static class ClipboardService
 
     private static (bool Success, uint Value) TryWriteText(string value, nint ownerWindow, uint? expectedSequence)
     {
+        BeforeNativeAccess?.Invoke();
         if (!NativeMethods.OpenClipboard(ownerWindow))
         {
             return (false, 0);

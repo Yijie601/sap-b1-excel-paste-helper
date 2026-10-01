@@ -104,6 +104,7 @@ dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeT
 ```
 
 This launches a disposable child process in a new noninteractive window station so the real user's clipboard is never accessed. Some Windows accounts refuse this isolation; the explicit integration run then fails before clipboard access. Ordinary smoke tests print a clear skip notice and cover the parser, workflow, retry/cancellation and safety rules with simulated I/O instead. Do not treat a skipped native test or passing simulations as real SAP acceptance verification.
+The Windows release CI opts into this integration test, so a release build must pass native clipboard verification as well as workflow simulations.
 
 ## Publishing a new version
 

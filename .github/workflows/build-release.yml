@@ -38,7 +38,7 @@ jobs:
         run: dotnet build .\SapB1ExcelHelper\SapB1ExcelHelper.csproj -c Release
 
       - name: Run smoke tests
-        run: dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release
+        run: dotnet run --project .\tests\SapB1ExcelHelper.SmokeTests\SapB1ExcelHelper.SmokeTests.csproj -c Release -- --native-clipboard-integration
 
       - name: Publish self-contained application
         shell: pwsh

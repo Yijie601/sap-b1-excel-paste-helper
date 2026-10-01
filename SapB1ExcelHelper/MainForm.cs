@@ -579,7 +579,7 @@ public sealed class MainForm : Form
 
     private void SetReady(InvoiceClipboardData invoice, string? detail = null)
     {
-        _statusLabel.Text = "● Ready";
+        _statusLabel.Text = _needsFreshCopy ? "● Finished — copy B:N again" : "● Ready";
         _statusLabel.ForeColor = Color.FromArgb(22, 125, 72);
         if (detail is not null)
         {

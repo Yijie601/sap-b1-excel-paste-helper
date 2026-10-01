@@ -18,6 +18,9 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     internal static extern uint GetClipboardSequenceNumber();
 
+    [DllImport("user32.dll")]
+    internal static extern nint GetClipboardOwner();
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool OpenClipboard(nint ownerWindow);

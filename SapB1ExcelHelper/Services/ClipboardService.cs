@@ -61,10 +61,32 @@ public static class ClipboardService
         uint? expectedSequence = null) =>
         // EmptyClipboard can notify an external clipboard owner. Keep that
         // native call off the UI too; onBusy must be safe for a worker thread.
-        Task.Run(() => ClipboardRetry.RunAsync(
-            () => TryWriteText(value, ownerWindow, expectedSequence),
-            cancellationToken: cancellationToken,
-            onBusy: onBusy), cancellationToken);
+        Task.Run(async () =>
+        {
+            var notified = false;
+            void NotifyBusy()
+            {
+                if (!notified)
+                {
+                    notified = true;
+                    onBusy?.Invoke();
+                }
+            }
+
+            await ClipboardRetry.RunAsync(
+                () => TryWriteText(value, ownerWindow, expectedSequence),
+                cancellationToken: cancellationToken,
+                onBusy: NotifyBusy);
+
+            // Windows adds synthesized text formats during CloseClipboard,
+            // which can increment the sequence AFTER SetClipboardData. Reopen
+            // read-only, confirm we still own this copy, then capture its stable
+            // sequence while locked. Never replay a committed write here.
+            // Finish this ownership checkpoint even if cancellation follows
+            // the write, so the caller can safely restore its original text.
+            return await ClipboardRetry.RunAsync(
+                () => TryGetOwnedSequence(ownerWindow), onBusy: NotifyBusy);
+        }, cancellationToken);
 
     private static (bool Success, ClipboardText Value) TryReadText()
     {
@@ -121,12 +143,12 @@ public static class ClipboardService
         }
     }
 
-    private static (bool Success, uint Value) TryWriteText(string value, nint ownerWindow, uint? expectedSequence)
+    private static (bool Success, bool Value) TryWriteText(string value, nint ownerWindow, uint? expectedSequence)
     {
         BeforeNativeAccess?.Invoke();
         if (!NativeMethods.OpenClipboard(ownerWindow))
         {
-            return (false, 0);
+            return (false, false);
         }
 
         nint memory = 0;
@@ -165,7 +187,7 @@ public static class ClipboardService
             }
 
             memory = 0; // Ownership transfers to Windows after a successful write.
-            return (true, Sequence);
+            return (true, true);
         }
         finally
         {
@@ -174,6 +196,28 @@ public static class ClipboardService
                 _ = NativeMethods.GlobalFree(memory);
             }
 
+            _ = NativeMethods.CloseClipboard();
+        }
+    }
+
+    private static (bool Success, uint Value) TryGetOwnedSequence(nint ownerWindow)
+    {
+        BeforeNativeAccess?.Invoke();
+        if (!NativeMethods.OpenClipboard(ownerWindow))
+        {
+            return (false, 0);
+        }
+
+        try
+        {
+            if (NativeMethods.GetClipboardOwner() != ownerWindow)
+            {
+                throw new ClipboardChangedException();
+            }
+            return (true, Sequence);
+        }
+        finally
+        {
             _ = NativeMethods.CloseClipboard();
         }
     }

@@ -5,6 +5,7 @@
 - Replaced synchronous clipboard sleeps with bounded asynchronous retries (up to eight seconds); native reads/writes run off the UI thread, with one shared pending read for delayed Excel rendering.
 - Uses Win32 Unicode text directly and restores B:N only once at the end, reducing successful-run clipboard writes from ten to six.
 - Preserves the validated clipboard sequence through startup and every step; new user copies are never deliberately overwritten during restoration.
+- Captures the owned clipboard sequence after Windows finishes synthesizing text formats on close, avoiding a false clipboard-change error after the first paste. Native Windows CI verifies the exact Unicode roundtrip and sequence.
 - Stops on foreground/root-window changes, top-level overlays, off-monitor coordinates, or target movement during a run. This is not SAP field recognition.
 - Ignores stale clipboard-validation results/failures and requires a fresh Excel copy after any started attempt, preventing repeated F8 from replaying Items.
 - Added tray cancellation and prevented Calibration/main-window activation during automation. Even uncertain partial input finishes its payload guard before clipboard restoration.
